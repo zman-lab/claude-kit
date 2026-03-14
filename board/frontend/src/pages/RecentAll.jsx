@@ -100,8 +100,8 @@ export default function RecentAll() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">[{p.board_slug}]</span>
-                  <span className="text-sm font-medium text-slate-900 dark:text-white truncate">{p.title}</span>
                   <TagBadge tag={p.tag} />
+                  <span className="text-sm font-medium text-slate-900 dark:text-white truncate">{p.title}</span>
                 </div>
                 <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400 dark:text-slate-500">
                   <span>{p.author}</span>

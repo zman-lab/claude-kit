@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { createPost, getBoards } from '../utils/api.js'
+import { createPost, getBoards, uploadAttachment } from '../utils/api.js'
 import { renderMarkdown } from '../utils/markdown.js'
 import { useToast } from '../contexts/ToastContext.jsx'
 
@@ -18,6 +18,8 @@ export default function NewPost() {
   const [prefix, setPrefix] = useState('')
   const [preview, setPreview] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [pendingFiles, setPendingFiles] = useState([])
+  const textareaRef = useRef(null)
 
   useEffect(() => {
     getBoards().then(boards => {
@@ -43,12 +45,42 @@ export default function NewPost() {
         tag: tag || undefined,
         prefix: prefix || undefined,
       })
+      // Upload pending files
+      for (const file of pendingFiles) {
+        try {
+          await uploadAttachment(result.id, file, author || 'anonymous')
+        } catch (err) {
+          toast.error(`${file.name}: ${err.message}`)
+        }
+      }
       toast.success('게시글이 등록되었습니다')
       navigate(`/posts/${result.id}`)
     } catch (e) {
       toast.error(e.message)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const handlePaste = (e) => {
+    const items = [...(e.clipboardData?.items || [])]
+    const imageItem = items.find(i => i.type.startsWith('image/'))
+    if (imageItem) {
+      e.preventDefault()
+      const file = imageItem.getAsFile()
+      const name = `clipboard-${Date.now()}.png`
+      const namedFile = new File([file], name, { type: file.type })
+      setPendingFiles(prev => [...prev, namedFile])
+      // Insert {#filename} tag at cursor
+      const textarea = textareaRef.current
+      if (textarea) {
+        const tag = `{#${name}}`
+        const start = textarea.selectionStart
+        const before = content.slice(0, start)
+        const after = content.slice(start)
+        setContent(before + tag + after)
+      }
+      toast.success('이미지 붙여넣기 완료')
     }
   }
 
@@ -97,12 +129,25 @@ export default function NewPost() {
           </div>
           <div>
             <label className="block text-xs font-medium text-slate-500 dark:text-slate-400 mb-1">Prefix</label>
-            <input
-              value={prefix}
-              onChange={e => setPrefix(e.target.value)}
-              placeholder="e.g. [Guide]"
-              className="w-32 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white"
-            />
+            {board?.allowed_prefixes ? (
+              <select
+                value={prefix}
+                onChange={e => setPrefix(e.target.value)}
+                className="px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white"
+              >
+                <option value="">머릿말 없음</option>
+                {board.allowed_prefixes.split(',').map(p => (
+                  <option key={p.trim()} value={p.trim()}>{p.trim()}</option>
+                ))}
+              </select>
+            ) : (
+              <input
+                value={prefix}
+                onChange={e => setPrefix(e.target.value)}
+                placeholder="e.g. [Guide]"
+                className="w-32 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white"
+              />
+            )}
           </div>
         </div>
 
@@ -125,12 +170,37 @@ export default function NewPost() {
             />
           ) : (
             <textarea
+              ref={textareaRef}
               value={content}
               onChange={e => setContent(e.target.value)}
-              placeholder="Write your post in Markdown..."
+              onPaste={handlePaste}
+              placeholder="Write your post in Markdown... (이미지 붙여넣기 가능)"
               rows={12}
               className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white font-mono resize-y"
             />
+          )}
+        </div>
+
+        {/* File attachments */}
+        <div>
+          <div className="flex items-center gap-2 flex-wrap">
+            <label className="cursor-pointer text-sm text-blue-600 hover:text-blue-700 inline-flex items-center gap-1">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+              파일 첨부
+              <input type="file" multiple onChange={e => setPendingFiles(prev => [...prev, ...Array.from(e.target.files)])} className="hidden" />
+            </label>
+            <span className="text-xs text-slate-400">이미지 붙여넣기도 가능</span>
+          </div>
+          {pendingFiles.length > 0 && (
+            <div className="mt-2 space-y-1">
+              {pendingFiles.map((f, i) => (
+                <div key={i} className="flex items-center gap-2 text-xs text-slate-600 dark:text-slate-300">
+                  <svg className="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                  <span>{f.name} ({(f.size / 1024).toFixed(1)}KB)</span>
+                  <button type="button" onClick={() => setPendingFiles(prev => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600">&times;</button>
+                </div>
+              ))}
+            </div>
           )}
         </div>
 

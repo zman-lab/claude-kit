@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom'
 import { getPost, toggleLike, createReply, updatePost, deletePost, updateReply, deleteReply, uploadAttachment, getAttachments } from '../utils/api.js'
 import { timeAgo, formatDate } from '../utils/time.js'
 import { renderMarkdown } from '../utils/markdown.js'
+import { printContent } from '../utils/print.js'
 import { useToast } from '../contexts/ToastContext.jsx'
 import Spinner from '../components/Spinner.jsx'
 import TagBadge from '../components/TagBadge.jsx'
@@ -22,7 +23,11 @@ export default function PostPage() {
   const [editingReplyId, setEditingReplyId] = useState(null)
   const [editReplyContent, setEditReplyContent] = useState('')
   const [attachments, setAttachments] = useState([])
+  const [showPrint, setShowPrint] = useState(false)
+  const [dragging, setDragging] = useState(false)
+  const [replyPendingFiles, setReplyPendingFiles] = useState([])
   const fileInputRef = useRef(null)
+  const replyFileInputRef = useRef(null)
 
   const load = async () => {
     try {
@@ -38,6 +43,24 @@ export default function PostPage() {
   }
 
   useEffect(() => { load() }, [id])
+
+  // Code block copy buttons
+  useEffect(() => {
+    if (!post) return
+    document.querySelectorAll('.markdown-body pre').forEach(pre => {
+      if (pre.querySelector('.code-copy-btn')) return
+      const btn = document.createElement('button')
+      btn.className = 'code-copy-btn'
+      btn.textContent = '복사'
+      btn.style.cssText = 'position:absolute;top:4px;right:4px;padding:2px 8px;font-size:11px;background:#374151;color:#e5e7eb;border:1px solid #4b5563;border-radius:4px;cursor:pointer;opacity:0.7;z-index:1'
+      btn.onclick = () => {
+        const code = pre.querySelector('code')?.textContent || pre.textContent
+        navigator.clipboard.writeText(code).then(() => { btn.textContent = '\u2713'; setTimeout(() => btn.textContent = '복사', 1500) })
+      }
+      pre.style.position = 'relative'
+      pre.appendChild(btn)
+    })
+  }, [post])
 
   const handleLike = async () => {
     try {
@@ -122,6 +145,54 @@ export default function PostPage() {
     setAttachments(atts)
   }
 
+  const handleDrop = async (e) => {
+    e.preventDefault()
+    setDragging(false)
+    const files = [...e.dataTransfer.files]
+    if (files.length === 0) return
+    for (const file of files) {
+      try {
+        await uploadAttachment(post.id, file, replyAuthor || 'anonymous')
+        toast.success(`${file.name} 업로드 완료`)
+      } catch (err) {
+        toast.error(`${file.name}: ${err.message}`)
+      }
+    }
+    const atts = await getAttachments(post.id).catch(() => [])
+    setAttachments(atts)
+  }
+
+  const handleReplyWithFiles = async (e) => {
+    e.preventDefault()
+    if (!replyContent.trim()) return
+    setSubmitting(true)
+    try {
+      localStorage.setItem('cb-author', replyAuthor)
+      const reply = await createReply(post.id, { content: replyContent, author: replyAuthor || 'anonymous' })
+      for (const file of replyPendingFiles) {
+        await uploadAttachment(reply.id, file, replyAuthor || 'anonymous')
+      }
+      setReplyPendingFiles([])
+      setReplyContent('')
+      toast.success('댓글이 등록되었습니다')
+      await load()
+    } catch (e) {
+      toast.error(e.message)
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  const buildRepliesHtml = () => {
+    if (!post?.replies?.length) return ''
+    return post.replies.map(r => `
+      <div class="reply">
+        <div class="reply-author">${r.author} &mdash; ${new Date(r.created_at).toLocaleString()}</div>
+        <div>${renderMarkdown(r.content)}</div>
+      </div>
+    `).join('')
+  }
+
   const handlePaste = (e) => {
     const items = e.clipboardData?.items
     if (!items) return
@@ -151,7 +222,12 @@ export default function PostPage() {
       </div>
 
       {/* Post */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm">
+      <div
+        className={`bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-sm ${dragging ? 'ring-2 ring-blue-400 ring-dashed' : ''}`}
+        onDragOver={e => { e.preventDefault(); setDragging(true) }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+      >
         <div className="p-6">
           {editing ? (
             <div className="space-y-3">
@@ -189,6 +265,31 @@ export default function PostPage() {
                   </div>
                 </div>
                 <div className="flex gap-1 shrink-0">
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowPrint(!showPrint)}
+                      className="p-2 text-slate-400 hover:text-blue-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
+                      title="Print"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" /></svg>
+                    </button>
+                    {showPrint && (
+                      <div className="absolute right-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg p-1 z-50 min-w-[120px]">
+                        <button
+                          onClick={() => { printContent(post.title, `<h1>${post.title}</h1>` + renderMarkdown(post.content)); setShowPrint(false) }}
+                          className="block text-xs py-1.5 px-3 hover:bg-slate-100 dark:hover:bg-slate-700 w-full text-left rounded text-slate-700 dark:text-slate-200"
+                        >
+                          본문만
+                        </button>
+                        <button
+                          onClick={() => { printContent(post.title, `<h1>${post.title}</h1>` + renderMarkdown(post.content) + buildRepliesHtml()); setShowPrint(false) }}
+                          className="block text-xs py-1.5 px-3 hover:bg-slate-100 dark:hover:bg-slate-700 w-full text-left rounded text-slate-700 dark:text-slate-200"
+                        >
+                          댓글 포함
+                        </button>
+                      </div>
+                    )}
+                  </div>
                   <button
                     onClick={() => { setEditing(true); setEditTitle(post.title); setEditContent(post.content) }}
                     className="p-2 text-slate-400 hover:text-blue-500 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-700"
@@ -231,7 +332,7 @@ export default function PostPage() {
                 </div>
               )}
 
-              {/* Like + Upload */}
+              {/* Like + Copy + Upload */}
               <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-700 flex items-center gap-3">
                 <button
                   onClick={handleLike}
@@ -241,6 +342,15 @@ export default function PostPage() {
                       : 'bg-white dark:bg-slate-700 border-slate-300 dark:border-slate-600 text-slate-500 hover:border-red-300'}`}
                 >
                   ❤️ {post.like_count || 0}
+                </button>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(post.content)
+                    toast.success('본문 복사됨')
+                  }}
+                  className="px-3 py-1.5 text-sm text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 border border-slate-300 dark:border-slate-600 rounded-full"
+                >
+                  📋 복사
                 </button>
                 <button
                   onClick={() => fileInputRef.current?.click()}
@@ -310,6 +420,41 @@ export default function PostPage() {
                   className="markdown-body text-sm text-slate-700 dark:text-slate-200"
                   dangerouslySetInnerHTML={{ __html: renderMarkdown(r.content) }}
                 />
+                {/* Reply attachments */}
+                {r.attachments?.length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {r.attachments.map(att => (
+                      <a
+                        key={att.id}
+                        href={`/api/attachments/${att.id}/download`}
+                        className="inline-flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 hover:underline"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+                        {att.filename}
+                      </a>
+                    ))}
+                  </div>
+                )}
+                <div className="mt-2 flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      await toggleLike(r.id, replyAuthor || 'anonymous')
+                      await load()
+                    }}
+                    className="text-xs text-slate-400 hover:text-red-500"
+                  >
+                    ❤️ {r.like_count || 0}
+                  </button>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(r.content)
+                      toast.success('댓글 복사됨')
+                    }}
+                    className="px-1.5 py-0.5 text-xs bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded"
+                  >
+                    복사
+                  </button>
+                </div>
               </>
             )}
           </div>
@@ -317,7 +462,7 @@ export default function PostPage() {
       </div>
 
       {/* Reply form */}
-      <form onSubmit={handleReply} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm space-y-3">
+      <form onSubmit={handleReplyWithFiles} className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-4 shadow-sm space-y-3">
         <div className="flex gap-3">
           <input
             value={replyAuthor}
@@ -334,6 +479,28 @@ export default function PostPage() {
           rows={3}
           className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white resize-y"
         />
+        {/* Reply pending files */}
+        <div className="flex items-center gap-2 flex-wrap">
+          <label className="cursor-pointer text-xs text-blue-600 hover:text-blue-700">
+            <span className="inline-flex items-center gap-1">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+              첨부
+            </span>
+            <input
+              ref={replyFileInputRef}
+              type="file"
+              multiple
+              onChange={e => setReplyPendingFiles(prev => [...prev, ...Array.from(e.target.files)])}
+              className="hidden"
+            />
+          </label>
+          {replyPendingFiles.map((f, i) => (
+            <span key={i} className="inline-flex items-center gap-1 text-xs text-slate-500 bg-slate-100 dark:bg-slate-700 px-2 py-0.5 rounded">
+              {f.name} ({(f.size / 1024).toFixed(1)}KB)
+              <button type="button" onClick={() => setReplyPendingFiles(prev => prev.filter((_, j) => j !== i))} className="text-red-400 hover:text-red-600 ml-0.5">&times;</button>
+            </span>
+          ))}
+        </div>
         <div className="flex justify-end">
           <button
             type="submit"

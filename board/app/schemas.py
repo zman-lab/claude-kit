@@ -1,6 +1,8 @@
 """Pydantic 스키마 정의."""
 
-from pydantic import BaseModel, Field
+import re
+
+from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 
 
@@ -8,12 +10,23 @@ from datetime import datetime
 
 class TeamCreate(BaseModel):
     name: str = Field(..., min_length=1)
-    slug: str = Field(..., min_length=1, pattern=r"^[a-z0-9\-]+$")
+    slug: str = Field(..., min_length=1)
     icon: str = "📋"
     color: str = "#6366f1"
     color_dark: str | None = None
     description: str = ""
     sort_order: int = 0
+
+    @field_validator('slug')
+    @classmethod
+    def validate_slug(cls, v):
+        if not v:
+            raise ValueError('슬러그는 필수입니다')
+        if not re.match(r'^[a-z0-9][a-z0-9_-]*$', v):
+            raise ValueError('슬러그는 영어 소문자, 숫자, -, _ 만 사용 가능합니다')
+        if len(v) > 30:
+            raise ValueError('슬러그는 30자 이하여야 합니다')
+        return v
 
 
 class TeamUpdate(BaseModel):
@@ -189,3 +202,12 @@ class SetupInit(BaseModel):
     team_slug: str | None = None       # 첫 팀 slug (선택)
     team_icon: str = "📋"
     team_color: str = "#6366f1"
+
+    @field_validator('team_slug')
+    @classmethod
+    def validate_team_slug(cls, v):
+        if not v:
+            return v  # None 허용 (선택 필드)
+        if not re.match(r'^[a-z0-9][a-z0-9_-]*$', v):
+            raise ValueError('슬러그는 영어 소문자, 숫자, -, _ 만 사용 가능합니다')
+        return v

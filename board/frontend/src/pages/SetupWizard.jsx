@@ -1,6 +1,29 @@
 import { useState } from 'react'
 import { initSetup } from '../utils/api'
 
+const TEAM_ICONS = [
+  { emoji: '📋', label: '게시판' },
+  { emoji: '🚀', label: '로켓' },
+  { emoji: '⚡', label: '번개' },
+  { emoji: '🔥', label: '불꽃' },
+  { emoji: '💡', label: '아이디어' },
+  { emoji: '🎯', label: '타겟' },
+  { emoji: '🛡️', label: '방패' },
+  { emoji: '⚖️', label: '저울' },
+  { emoji: '🔐', label: '자물쇠' },
+  { emoji: '🐕', label: '강아지' },
+  { emoji: '🦊', label: '여우' },
+  { emoji: '🐻', label: '곰' },
+  { emoji: '⭐', label: '별' },
+  { emoji: '🌟', label: '반짝별' },
+  { emoji: '💎', label: '보석' },
+  { emoji: '🎨', label: '팔레트' },
+  { emoji: '🔧', label: '공구' },
+  { emoji: '📊', label: '차트' },
+  { emoji: '🏗️', label: '건설' },
+  { emoji: '🧪', label: '실험' },
+]
+
 export default function SetupWizard({ onComplete }) {
   const [step, setStep] = useState(1)
   const [password, setPassword] = useState('')
@@ -26,7 +49,14 @@ export default function SetupWizard({ onComplete }) {
     setLoading(true)
     setError('')
     try {
-      await initSetup({ password, team })
+      await initSetup({
+        admin_password: password,
+        team_name: team.name,
+        team_slug: team.slug,
+        team_icon: team.icon,
+        team_color: team.color,
+        team_description: team.description || ''
+      })
       setStep(3)
     } catch (e) {
       setError(e.message || '설정 실패')
@@ -78,17 +108,32 @@ export default function SetupWizard({ onComplete }) {
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">슬러그 (URL용)</label>
-              <input type="text" value={team.slug} onChange={e => setTeam({ ...team, slug: e.target.value })} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="자동 생성" />
+              <input type="text" value={team.slug} onChange={e => setTeam({ ...team, slug: e.target.value })} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg dark:bg-gray-700 dark:text-white bg-gray-50 dark:bg-gray-700 focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none" placeholder="영어소문자, 숫자, -, _ 만 가능" />
+              <p className="text-xs text-gray-400 mt-1">예: dev-team, alpha_1</p>
             </div>
-            <div className="flex gap-4">
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">아이콘</label>
-                <input type="text" value={team.icon} onChange={e => setTeam({ ...team, icon: e.target.value })} className="w-full px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-2xl text-center dark:bg-gray-700" />
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">팀 아이콘</label>
+              <div className="grid grid-cols-10 gap-2">
+                {TEAM_ICONS.map(({ emoji, label }) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => setTeam({...team, icon: emoji})}
+                    title={label}
+                    className={`text-2xl p-2 rounded-lg border-2 transition-all ${
+                      team.icon === emoji
+                        ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/30 scale-110'
+                        : 'border-transparent hover:border-gray-300 dark:hover:border-gray-600'
+                    }`}
+                  >
+                    {emoji}
+                  </button>
+                ))}
               </div>
-              <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">팀 색상</label>
-                <input type="color" value={team.color} onChange={e => setTeam({ ...team, color: e.target.value })} className="w-full h-10 rounded-lg cursor-pointer border border-gray-300 dark:border-gray-600" />
-              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">팀 색상</label>
+              <input type="color" value={team.color} onChange={e => setTeam({ ...team, color: e.target.value })} className="w-full h-10 rounded-lg cursor-pointer border border-gray-300 dark:border-gray-600" />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">설명 (선택)</label>
@@ -107,7 +152,7 @@ export default function SetupWizard({ onComplete }) {
             <p className="text-gray-600 dark:text-gray-300">
               <span className="font-bold" style={{ color: team.color }}>{team.icon} {team.name}</span> 팀 게시판이 생성되었습니다!
             </p>
-            <button onClick={() => onComplete()} className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 font-medium transition-colors">대시보드로 이동</button>
+            <button onClick={() => window.location.reload()} className="w-full bg-indigo-600 text-white py-2 rounded-lg hover:bg-indigo-700 font-medium transition-colors">대시보드로 이동</button>
           </div>
         )}
       </div>

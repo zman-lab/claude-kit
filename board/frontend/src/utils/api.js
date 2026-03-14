@@ -7,7 +7,12 @@ async function request(url, options = {}) {
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || `HTTP ${res.status}`)
+    const msg = typeof body.detail === 'string'
+      ? body.detail
+      : Array.isArray(body.detail)
+        ? body.detail.map(e => e.msg || e).join(', ')
+        : `HTTP ${res.status}`
+    throw new Error(msg)
   }
   return res.json()
 }
@@ -92,7 +97,12 @@ export async function uploadAttachment(postId, file, uploader = 'anonymous') {
   })
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new Error(body.detail || `HTTP ${res.status}`)
+    const msg = typeof body.detail === 'string'
+      ? body.detail
+      : Array.isArray(body.detail)
+        ? body.detail.map(e => e.msg || e).join(', ')
+        : `HTTP ${res.status}`
+    throw new Error(msg)
   }
   return res.json()
 }

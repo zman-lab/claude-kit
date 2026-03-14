@@ -162,6 +162,19 @@ function PasswordsTab({ adminPw }) {
   )
 }
 
+const TEAM_ICONS = [
+  { emoji: '📋', label: '게시판' }, { emoji: '🚀', label: '로켓' },
+  { emoji: '⚡', label: '번개' }, { emoji: '🔥', label: '불꽃' },
+  { emoji: '💡', label: '아이디어' }, { emoji: '🎯', label: '타겟' },
+  { emoji: '🛡️', label: '방패' }, { emoji: '⚖️', label: '저울' },
+  { emoji: '🔐', label: '자물쇠' }, { emoji: '🐕', label: '강아지' },
+  { emoji: '🦊', label: '여우' }, { emoji: '🐻', label: '곰' },
+  { emoji: '⭐', label: '별' }, { emoji: '🌟', label: '반짝별' },
+  { emoji: '💎', label: '보석' }, { emoji: '🎨', label: '팔레트' },
+  { emoji: '🔧', label: '공구' }, { emoji: '📊', label: '차트' },
+  { emoji: '🏗️', label: '건설' }, { emoji: '🧪', label: '실험' },
+]
+
 function TeamsTab({ adminPw }) {
   const toast = useToast()
   const [teams, setTeams] = useState([])
@@ -191,7 +204,7 @@ function TeamsTab({ adminPw }) {
       setNewTeam({ name: '', slug: '', icon: '📋', color: '#6366f1', description: '' })
       setShowForm(false)
       toast.success('팀 생성 완료')
-      load()
+      setTimeout(() => window.location.reload(), 500)
     } catch (e) {
       toast.error(e.message)
     }
@@ -240,11 +253,18 @@ function TeamsTab({ adminPw }) {
             </div>
             <div className="flex-1 min-w-[100px]">
               <label className="block text-xs text-slate-500 mb-1">슬러그</label>
-              <input value={newTeam.slug} onChange={e => setNewTeam({ ...newTeam, slug: e.target.value })} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-sm dark:text-white" placeholder="자동 생성" />
+              <input value={newTeam.slug} onChange={e => setNewTeam({ ...newTeam, slug: e.target.value })} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-sm dark:text-white" placeholder="영어소문자, 숫자, -, _ 만 가능" />
             </div>
-            <div className="w-16">
+            <div className="w-full">
               <label className="block text-xs text-slate-500 mb-1">아이콘</label>
-              <input value={newTeam.icon} onChange={e => setNewTeam({ ...newTeam, icon: e.target.value })} className="w-full px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded text-center text-lg dark:bg-slate-700" />
+              <div className="flex flex-wrap gap-1">
+                {TEAM_ICONS.map(({ emoji, label }) => (
+                  <button key={emoji} type="button" onClick={() => setNewTeam({...newTeam, icon: emoji})} title={label}
+                    className={`text-xl w-9 h-9 rounded-lg border-2 transition-all ${newTeam.icon === emoji ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/30 scale-110' : 'border-transparent hover:border-slate-300 dark:hover:border-slate-600'}`}>
+                    {emoji}
+                  </button>
+                ))}
+              </div>
             </div>
             <div className="w-16">
               <label className="block text-xs text-slate-500 mb-1">색상</label>
@@ -282,7 +302,14 @@ function TeamsTab({ adminPw }) {
                 <td className="py-2 px-2">{t.id}</td>
                 {editingId === t.id ? (
                   <>
-                    <td className="py-2 px-2"><input value={editData.icon} onChange={e => setEditData({ ...editData, icon: e.target.value })} className="w-10 px-1 py-0.5 border border-slate-300 dark:border-slate-600 rounded text-center dark:bg-slate-700" /></td>
+                    <td className="py-2 px-2">
+                      <select value={editData.icon} onChange={e => setEditData({...editData, icon: e.target.value})}
+                        className="text-lg bg-white dark:bg-slate-700 border border-slate-300 dark:border-slate-600 rounded px-1 py-0.5">
+                        {TEAM_ICONS.map(({emoji, label}) => (
+                          <option key={emoji} value={emoji}>{emoji} {label}</option>
+                        ))}
+                      </select>
+                    </td>
                     <td className="py-2 px-2"><input value={editData.name} onChange={e => setEditData({ ...editData, name: e.target.value })} className="w-24 px-1 py-0.5 border border-slate-300 dark:border-slate-600 rounded dark:bg-slate-700 dark:text-white text-sm" /></td>
                     <td className="py-2 px-2"><input value={editData.slug} onChange={e => setEditData({ ...editData, slug: e.target.value })} className="w-24 px-1 py-0.5 border border-slate-300 dark:border-slate-600 rounded dark:bg-slate-700 dark:text-white text-sm" /></td>
                     <td className="py-2 px-2"><input type="color" value={editData.color} onChange={e => setEditData({ ...editData, color: e.target.value })} className="w-8 h-6 rounded cursor-pointer" /></td>

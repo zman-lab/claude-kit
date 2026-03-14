@@ -7,6 +7,7 @@ import { timeAgo } from '../utils/time.js'
 import { stripMarkdown } from '../utils/markdown.js'
 import Spinner from '../components/Spinner.jsx'
 import TagBadge from '../components/TagBadge.jsx'
+import { useToast } from '../contexts/ToastContext.jsx'
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, BarElement, ArcElement, Title, Tooltip, Legend, Filler)
 
@@ -26,9 +27,7 @@ function SummaryCard({ label, value, icon, color }) {
   )
 }
 
-const TEAM_COLORS = {
-  law: '#7c3aed', airlock: '#0891b2', elkhound: '#ea580c', board: '#525252', lawear: '#059669',
-}
+const FALLBACK_COLORS = ['#7c3aed', '#0891b2', '#ea580c', '#525252', '#059669', '#3b82f6', '#f59e0b', '#ef4444']
 
 export default function Dashboard() {
   const [summary, setSummary] = useState(null)
@@ -40,6 +39,23 @@ export default function Dashboard() {
   const [tokenUsage, setTokenUsage] = useState(null)
   const [tokenPeriod, setTokenPeriod] = useState('7d')
   const [loading, setLoading] = useState(true)
+  const [teamColors, setTeamColors] = useState({})
+
+  // Card visibility settings (localStorage)
+  const CARD_IDS = ['summary', 'dailyTrend', 'teamTrend', 'tagDist', 'tokenUsage', 'recentActivity']
+  const [hiddenCards, setHiddenCards] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('dashboard-hidden-cards') || '[]') } catch { return [] }
+  })
+  const [showSettings, setShowSettings] = useState(false)
+
+  const toggleCard = (id) => {
+    const next = hiddenCards.includes(id) ? hiddenCards.filter(c => c !== id) : [...hiddenCards, id]
+    setHiddenCards(next)
+    localStorage.setItem('dashboard-hidden-cards', JSON.stringify(next))
+  }
+
+  const isVisible = (id) => !hiddenCards.includes(id)
+  const toast = useToast()
 
   useEffect(() => {
     Promise.all([
@@ -50,6 +66,11 @@ export default function Dashboard() {
       getDailyTrendByTeam().then(setTrendByTeam),
       getRecentActivity(10).then(setActivity),
       getTokenUsage('7d', 'team').then(setTokenUsage),
+      fetch('/api/admin/teams').then(r => r.json()).then(teams => {
+        const colors = {}
+        ;(Array.isArray(teams) ? teams : []).forEach(t => { if (t.slug && t.color) colors[t.slug] = t.color })
+        setTeamColors(colors)
+      }).catch(() => {}),
     ]).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
@@ -71,19 +92,12 @@ export default function Dashboard() {
     }],
   } : null
 
-  const trendByTeamData = trendByTeam ? {
-    labels: [...new Set(trendByTeam.map(d => d.date?.slice(5) || ''))],
-    datasets: Object.entries(
-      trendByTeam.reduce((acc, d) => {
-        const team = d.team || 'other'
-        if (!acc[team]) acc[team] = {}
-        acc[team][d.date?.slice(5) || ''] = d.count
-        return acc
-      }, {})
-    ).map(([team, counts]) => ({
+  const trendByTeamData = trendByTeam?.dates ? {
+    labels: trendByTeam.dates.map(d => d.slice(5)),
+    datasets: Object.entries(trendByTeam.teams || {}).map(([team, counts]) => ({
       label: team,
-      data: [...new Set(trendByTeam.map(d => d.date?.slice(5) || ''))].map(date => counts[date] || 0),
-      backgroundColor: TEAM_COLORS[team] || '#94a3b8',
+      data: counts,
+      backgroundColor: teamColors[team] || '#94a3b8',
     })),
   } : null
 
@@ -107,97 +121,150 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-slate-900 dark:text-white">Dashboard</h1>
+        <div className="relative">
+          <button onClick={() => setShowSettings(!showSettings)} className="p-2 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-500">
+            ⚙️
+          </button>
+          {showSettings && (
+            <div className="absolute right-0 top-10 w-56 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl shadow-lg p-3 z-50">
+              <p className="text-xs font-semibold text-slate-500 mb-2">표시할 카드</p>
+              {[
+                { id: 'summary', label: '요약 카드' },
+                { id: 'dailyTrend', label: '일별 트렌드' },
+                { id: 'teamTrend', label: '팀별 활동' },
+                { id: 'tagDist', label: '태그 분포' },
+                { id: 'tokenUsage', label: '토큰 사용량' },
+                { id: 'recentActivity', label: '최근 활동' },
+              ].map(({ id, label }) => (
+                <label key={id} className="flex items-center gap-2 py-1 cursor-pointer">
+                  <input type="checkbox" checked={isVisible(id)} onChange={() => toggleCard(id)} className="rounded" />
+                  <span className="text-sm text-slate-700 dark:text-slate-300">{label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Summary cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <SummaryCard label="Total Posts" value={summary?.total_posts ?? 0} icon="📝" color="bg-blue-50 dark:bg-blue-900/30" />
-        <SummaryCard label="Today" value={summary?.today_posts ?? 0} icon="📊" color="bg-green-50 dark:bg-green-900/30" />
-        <SummaryCard label="Open Issues" value={summary?.open_issues ?? 0} icon="🔥" color="bg-red-50 dark:bg-red-900/30" />
-        <SummaryCard label="Active Teams" value={summary?.active_teams ?? 0} icon="👥" color="bg-purple-50 dark:bg-purple-900/30" />
-      </div>
+      {isVisible('summary') && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <SummaryCard label="Total Posts" value={summary?.total_posts ?? 0} icon="📝" color="bg-blue-50 dark:bg-blue-900/30" />
+          <SummaryCard label="Today" value={summary?.today_posts ?? 0} icon="📊" color="bg-green-50 dark:bg-green-900/30" />
+          <SummaryCard label="Open Issues" value={summary?.open_issues ?? 0} icon="🔥" color="bg-red-50 dark:bg-red-900/30" />
+          <SummaryCard label="Active Teams" value={summary?.active_teams_24h ?? 0} icon="👥" color="bg-purple-50 dark:bg-purple-900/30" />
+        </div>
+      )}
 
       {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {/* Daily trend */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Daily Post Trend</h3>
-          <div className="h-48">
-            {trendData && <Line data={trendData} options={chartOptions} />}
-          </div>
-        </div>
+      {(isVisible('dailyTrend') || isVisible('teamTrend')) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {isVisible('dailyTrend') && (
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Daily Post Trend</h3>
+              <div className="h-48">
+                {trendData && <Line data={trendData} options={chartOptions} />}
+              </div>
+            </div>
+          )}
 
-        {/* By team */}
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Posts by Team</h3>
-          <div className="h-48">
-            {trendByTeamData && <Bar data={trendByTeamData} options={{ ...chartOptions, plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } }, scales: { ...chartOptions.scales, x: { ...chartOptions.scales.x, stacked: true }, y: { ...chartOptions.scales.y, stacked: true } } }} />}
-          </div>
+          {isVisible('teamTrend') && (
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Posts by Team</h3>
+              <div className="h-48">
+                {trendByTeamData && <Bar data={trendByTeamData} options={{ ...chartOptions, plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } }, scales: { ...chartOptions.scales, x: { ...chartOptions.scales.x, stacked: true }, y: { ...chartOptions.scales.y, stacked: true } } }} />}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Tag distribution + Token usage */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Tag Distribution</h3>
-          <div className="h-48 flex items-center justify-center">
-            {tagData && <Doughnut data={tagData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } } } }} />}
-          </div>
-        </div>
+      {(isVisible('tagDist') || isVisible('tokenUsage')) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {isVisible('tagDist') && (
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Tag Distribution</h3>
+              <div className="h-48 flex items-center justify-center">
+                {tagData && <Doughnut data={tagData} options={{ responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'right', labels: { boxWidth: 10, font: { size: 11 } } } } }} />}
+              </div>
+            </div>
+          )}
 
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Token Usage</h3>
-            <select
-              value={tokenPeriod}
-              onChange={e => setTokenPeriod(e.target.value)}
-              className="text-xs border border-slate-300 dark:border-slate-600 rounded-md px-2 py-1 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200"
-            >
-              <option value="7d">7 days</option>
-              <option value="30d">30 days</option>
-              <option value="all">All time</option>
-            </select>
-          </div>
-          <div className="h-48">
-            {tokenUsage?.datasets ? (
-              <Bar data={{
-                labels: tokenUsage.labels || [],
-                datasets: (tokenUsage.datasets || []).map((ds, i) => ({
-                  label: ds.label,
-                  data: ds.data,
-                  backgroundColor: Object.values(TEAM_COLORS)[i % Object.keys(TEAM_COLORS).length],
-                })),
-              }} options={{ ...chartOptions, plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }} />
-            ) : (
-              <div className="flex items-center justify-center h-full text-sm text-slate-400">No token data</div>
-            )}
-          </div>
+          {isVisible('tokenUsage') && (
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200">Token Usage</h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={async () => {
+                      await fetch('/api/token-usage/collect', { method: 'POST' })
+                      getTokenUsage(tokenPeriod, 'team').then(setTokenUsage)
+                      toast.success('토큰 수집 완료')
+                    }}
+                    className="text-xs px-2 py-1 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded hover:bg-slate-200 dark:hover:bg-slate-600"
+                  >
+                    Collect
+                  </button>
+                  <select
+                    value={tokenPeriod}
+                    onChange={e => setTokenPeriod(e.target.value)}
+                    className="text-xs border border-slate-300 dark:border-slate-600 rounded-md px-2 py-1 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200"
+                  >
+                    <option value="7d">7 days</option>
+                    <option value="30d">30 days</option>
+                    <option value="all">All time</option>
+                  </select>
+                </div>
+              </div>
+              <div className="h-48">
+                {tokenUsage?.datasets ? (
+                  <Bar data={{
+                    labels: tokenUsage.labels || [],
+                    datasets: (tokenUsage.datasets || []).map((ds, i) => ({
+                      label: ds.label,
+                      data: ds.data,
+                      backgroundColor: teamColors[ds.label] || FALLBACK_COLORS[i % FALLBACK_COLORS.length],
+                    })),
+                  }} options={{ ...chartOptions, plugins: { legend: { display: true, position: 'bottom', labels: { boxWidth: 10, font: { size: 10 } } } } }} />
+                ) : (
+                  <div className="flex items-center justify-center h-full text-sm text-slate-400">No token data</div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* Recent activity */}
-      <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
-        <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Recent Activity</h3>
-        <div className="divide-y divide-slate-100 dark:divide-slate-700">
-          {activity?.map((item, i) => (
-            <div key={i} className="py-2.5 flex items-start gap-3">
-              <div className="shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-xs">
-                {item.type === 'post' ? '📝' : item.type === 'reply' ? '💬' : '❤️'}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{item.author}</span>
-                  {item.tag && <TagBadge tag={item.tag} />}
+      {isVisible('recentActivity') && (
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Recent Activity</h3>
+          <div className="divide-y divide-slate-100 dark:divide-slate-700">
+            {activity?.map((item, i) => (
+              <div key={i} className="py-2.5 flex items-start gap-3">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-xs">
+                  {item.type === 'post' ? '📝' : item.type === 'reply' ? '💬' : '❤️'}
                 </div>
-                <Link to={`/posts/${item.post_id || item.id}`} className="text-sm text-slate-900 dark:text-white hover:text-blue-500 line-clamp-1">
-                  {item.title || stripMarkdown(item.content)}
-                </Link>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{item.author}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {item.tag && <TagBadge tag={item.tag} />}
+                    <Link to={`/posts/${item.post_id || item.id}`} className="text-sm text-slate-900 dark:text-white hover:text-blue-500 line-clamp-1">
+                      {item.title || stripMarkdown(item.content)}
+                    </Link>
+                  </div>
+                </div>
+                <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">{timeAgo(item.created_at)}</span>
               </div>
-              <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">{timeAgo(item.created_at)}</span>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   )
 }

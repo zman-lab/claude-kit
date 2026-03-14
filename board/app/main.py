@@ -1,15 +1,13 @@
-"""FastAPI 앱. 게시판 REST API + HTML 라우터 + 팀/셋업 관리 API."""
+"""FastAPI 앱. 게시판 REST API + React SPA 서빙 + 팀/셋업 관리 API."""
 
 import os
 import uuid
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
 from pathlib import Path
 
-from fastapi import FastAPI, Depends, HTTPException, Request, Form, Header, UploadFile, File
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse, Response
+from fastapi import FastAPI, Depends, HTTPException, Form, Header, UploadFile, File
+from fastapi.responses import JSONResponse, FileResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 
 from app.database import get_db, init_db, DB_PATH
@@ -49,187 +47,8 @@ async def lifespan(_app: FastAPI):
 
 app = FastAPI(title="Claude Board", lifespan=lifespan)
 
-# static/templates 마운트 (존재할 때만)
-_static_dir = Path(__file__).parent / "static"
-_templates_dir = Path(__file__).parent / "templates"
-if _static_dir.exists():
-    app.mount("/static", StaticFiles(directory=str(_static_dir)), name="static")
-if _templates_dir.exists():
-    templates = Jinja2Templates(directory=str(_templates_dir))
-else:
-    templates = None
-
-
-def _get_prefix(request: Request) -> str:
-    """프록시 prefix를 읽음 (헤더 -> 쿼리 파라미터 순으로 탐색)."""
-    prefix = request.headers.get("x-forwarded-prefix", "")
-    if not prefix:
-        prefix = request.query_params.get("_bp", "")
-    return prefix.rstrip("/")
-
-
-def _ctx(request: Request, **kwargs):
-    """템플릿 컨텍스트 생성."""
-    return {
-        "request": request,
-        "bp": _get_prefix(request),
-        **kwargs,
-    }
-
-
-def _redirect(request: Request, path: str) -> RedirectResponse:
-    """프록시 prefix를 포함한 리다이렉트."""
-    bp = _get_prefix(request)
-    return RedirectResponse(f"{bp}{path}", status_code=303)
-
-
-def _time_ago(dt) -> str:
-    if isinstance(dt, str):
-        from datetime import datetime as _dt
-        try:
-            dt = _dt.fromisoformat(dt)
-        except ValueError:
-            return dt
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-    diff = datetime.now(timezone.utc) - dt
-    seconds = int(diff.total_seconds())
-    if seconds < 60:
-        return "방금 전"
-    if seconds < 3600:
-        return f"{seconds // 60}분 전"
-    if seconds < 86400:
-        return f"{seconds // 3600}시간 전"
-    if seconds < 604800:
-        return f"{seconds // 86400}일 전"
-    return dt.strftime("%Y-%m-%d")
-
-
-if templates:
-    templates.env.filters["time_ago"] = _time_ago
-
-
-# -- HTML Pages --
-
-@app.get("/", response_class=HTMLResponse)
-def index(request: Request, db: Session = Depends(get_db)):
-    if not templates:
-        return HTMLResponse("<h1>Claude Board API</h1><p>No templates configured.</p>")
-    summary = crud.get_dashboard_summary(db)
-    team_stats = crud.get_team_stats(db)
-    tag_distribution = crud.get_tag_distribution(db)
-    recent_posts = crud.get_recent_posts_activity(db, limit=10)
-    recent_replies = crud.get_recent_replies_activity(db, limit=10)
-    daily_trend = crud.get_daily_post_counts(db)
-    daily_trend_by_team = crud.get_daily_post_counts_by_team(db)
-    token_usage = crud.get_token_usage_chart(db, period="7d", group_by="team")
-    return templates.TemplateResponse("dashboard.html", _ctx(request,
-        summary=summary, team_stats=team_stats, tag_distribution=tag_distribution,
-        recent_posts=recent_posts, recent_replies=recent_replies,
-        daily_trend=daily_trend, daily_trend_by_team=daily_trend_by_team,
-        token_usage=token_usage,
-    ))
-
-
-@app.get("/boards", response_class=HTMLResponse)
-def boards_page(request: Request, db: Session = Depends(get_db)):
-    if not templates:
-        raise HTTPException(404)
-    boards = crud.get_boards(db)
-    return templates.TemplateResponse("index.html", _ctx(request, boards=boards))
-
-
-@app.get("/board/{slug}", response_class=HTMLResponse)
-def board_page(slug: str, request: Request, page: int = 1, tag: str | None = None, db: Session = Depends(get_db)):
-    if not templates:
-        raise HTTPException(404)
-    board = crud.get_board_by_slug(db, slug)
-    if not board:
-        raise HTTPException(404, "게시판을 찾을 수 없습니다")
-    limit = 20
-    offset = (page - 1) * limit
-    posts = crud.get_posts(db, board.id, limit=limit, offset=offset, tag=tag)
-    total = crud.get_post_count(db, board.id)
-    total_pages = max(1, (total + limit - 1) // limit)
-    return templates.TemplateResponse("board.html", _ctx(request,
-        board=board, posts=posts, page=page, total_pages=total_pages, total=total,
-    ))
-
-
-@app.get("/post/{post_id}", response_class=HTMLResponse)
-def post_page(post_id: int, request: Request, db: Session = Depends(get_db)):
-    if not templates:
-        raise HTTPException(404)
-    data = crud.get_post(db, post_id)
-    if not data:
-        raise HTTPException(404, "게시글을 찾을 수 없습니다")
-    data["attachments"] = crud.get_attachments(db, post_id)
-    for item in data["replies"]:
-        item["attachments"] = crud.get_attachments(db, item["reply"].id)
-    return templates.TemplateResponse("post.html", _ctx(request, **data))
-
-
-# -- Like Form Action --
-
-@app.post("/action/like/{post_id}")
-def action_toggle_like(
-    post_id: int,
-    request: Request,
-    author: str = Form("anonymous"),
-    redirect_to: str = Form(""),
-    db: Session = Depends(get_db),
-):
-    try:
-        crud.toggle_like(db, post_id, author or "anonymous")
-    except ValueError:
-        raise HTTPException(404, "게시글을 찾을 수 없습니다")
-    if redirect_to:
-        return RedirectResponse(redirect_to, status_code=303)
-    return _redirect(request, f"/post/{post_id}")
-
-
-@app.get("/new/{slug}", response_class=HTMLResponse)
-def new_post_page(slug: str, request: Request, db: Session = Depends(get_db)):
-    if not templates:
-        raise HTTPException(404)
-    board = crud.get_board_by_slug(db, slug)
-    if not board:
-        raise HTTPException(404, "게시판을 찾을 수 없습니다")
-    return templates.TemplateResponse("new_post.html", _ctx(request, board=board))
-
-
-# -- Form Actions --
-
-@app.post("/action/post")
-def action_create_post(
-    request: Request,
-    board_slug: str = Form(...),
-    title: str = Form(...),
-    content: str = Form(...),
-    author: str = Form(...),
-    prefix: str = Form(""),
-    tag: str = Form(""),
-    db: Session = Depends(get_db),
-):
-    data = PostCreate(
-        board_slug=board_slug, title=title, content=content,
-        author=author, prefix=prefix or None, tag=tag or None,
-    )
-    post = crud.create_post(db, data)
-    return _redirect(request, f"/post/{post.id}")
-
-
-@app.post("/action/reply/{post_id}")
-def action_create_reply(
-    post_id: int,
-    request: Request,
-    content: str = Form(...),
-    author: str = Form(...),
-    db: Session = Depends(get_db),
-):
-    data = ReplyCreate(content=content, author=author)
-    crud.create_reply(db, post_id, data)
-    return _redirect(request, f"/post/{post_id}")
+# React SPA 빌드 결과물 서빙
+FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "dist"
 
 
 # -- REST API --
@@ -377,16 +196,6 @@ def api_create_board(data: BoardCreate, db: Session = Depends(get_db)):
         raise HTTPException(409, f"Board '{data.slug}' already exists")
     board = crud.create_board(db, data)
     return {"id": board.id, "slug": board.slug}
-
-
-@app.get("/recent-all", response_class=HTMLResponse)
-def recent_all_page(request: Request, team: str | None = None, tag: str | None = None, scope: str = "all", limit: int = 30, db: Session = Depends(get_db)):
-    if not templates:
-        raise HTTPException(404)
-    posts = crud.get_recent_all_posts(db, team=team, tag=tag, scope=scope, limit=limit)
-    return templates.TemplateResponse("recent_all.html", _ctx(request,
-        posts=posts, team=team, tag=tag, scope=scope, limit=limit,
-    ))
 
 
 @app.get("/api/recent-all")
@@ -578,13 +387,6 @@ def _verify_admin(x_admin_password: str = Header(None), db: Session = Depends(ge
     return result
 
 
-@app.get("/admin", response_class=HTMLResponse)
-def admin_page(request: Request):
-    if not templates:
-        raise HTTPException(404)
-    return templates.TemplateResponse("admin.html", _ctx(request))
-
-
 @app.post("/api/auth/verify")
 def api_auth_verify(data: VerifyRequest, db: Session = Depends(get_db)):
     result = crud.verify_password(db, data.password, data.visitor_id)
@@ -769,3 +571,85 @@ def api_teams_css(db: Session = Depends(get_db)):
             lines.append(f"@media (prefers-color-scheme: dark) {{ .team-{t.slug} {{ color: {t.color_dark}; }} }}")
 
     return Response(content="\n".join(lines), media_type="text/css")
+
+
+# -- Backup / Import API --
+
+@app.get("/api/admin/backup")
+def api_backup_db(
+    _admin=Depends(_verify_admin),
+    db: Session = Depends(get_db),
+):
+    """DB 파일 다운로드 (백업). WAL 체크포인트 후 스냅샷 전송."""
+    import shutil
+    import tempfile
+    from datetime import datetime
+    db_file = Path(DB_PATH)
+    if not db_file.exists():
+        raise HTTPException(404, "DB 파일을 찾을 수 없습니다")
+
+    # WAL 체크포인트: WAL 파일의 모든 데이터를 메인 DB 파일에 반영
+    from sqlalchemy import text as sa_text
+    db.execute(sa_text("PRAGMA wal_checkpoint(TRUNCATE)"))
+
+    # 메인 DB 파일을 임시 파일로 복사 후 전송 (전송 중 변경 방지)
+    tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    tmp.close()
+    shutil.copy2(str(db_file), tmp.name)
+
+    filename = f"claude-board-backup-{datetime.now().strftime('%Y%m%d_%H%M%S')}.db"
+    return FileResponse(
+        path=tmp.name,
+        filename=filename,
+        media_type="application/octet-stream",
+        background=None,
+    )
+
+
+@app.post("/api/admin/import")
+async def api_import_db(
+    file: UploadFile = File(...),
+    _admin=Depends(_verify_admin),
+    db: Session = Depends(get_db),
+):
+    """DB 파일 업로드 (임포트). 기존 DB를 백업 후 교체."""
+    import shutil
+    content = await file.read()
+    # SQLite 매직 바이트 검증
+    if not content[:16].startswith(b'SQLite format 3'):
+        raise HTTPException(400, "유효한 SQLite 파일이 아닙니다")
+
+    db_file = Path(DB_PATH)
+    backup_path = None
+    # 기존 DB 백업
+    if db_file.exists():
+        backup_path = db_file.with_suffix('.pre-import.db')
+        shutil.copy2(str(db_file), str(backup_path))
+
+    # WAL/SHM 파일 삭제 (SQLite WAL 모드 잔여 데이터 방지)
+    for suffix in ('.db-wal', '.db-shm', '.db-journal'):
+        wal_file = db_file.with_suffix(suffix)
+        if wal_file.exists():
+            wal_file.unlink()
+
+    # 새 DB 쓰기
+    db_file.write_bytes(content)
+
+    return {"ok": True, "message": "임포트 완료. 서버를 재시작하면 새 DB가 반영됩니다.", "backup": str(backup_path) if backup_path else None}
+
+
+# -- React SPA 서빙 (모든 API 라우트 뒤에 등록) --
+
+if FRONTEND_DIR.exists():
+    # 정적 에셋 (JS, CSS 등)
+    _assets_dir = FRONTEND_DIR / "assets"
+    if _assets_dir.exists():
+        app.mount("/assets", StaticFiles(directory=str(_assets_dir)), name="assets")
+
+    @app.get("/{full_path:path}")
+    async def serve_spa(full_path: str):
+        """SPA fallback — API가 아닌 모든 요청에 index.html 반환."""
+        file_path = FRONTEND_DIR / full_path
+        if full_path and file_path.is_file():
+            return FileResponse(str(file_path))
+        return FileResponse(str(FRONTEND_DIR / "index.html"))

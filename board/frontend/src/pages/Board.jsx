@@ -86,8 +86,8 @@ export default function Board() {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
                   {p.prefix && <span className="text-xs text-slate-500 dark:text-slate-400">{p.prefix}</span>}
-                  <span className="text-sm font-medium text-slate-900 dark:text-white truncate">{p.title}</span>
                   <TagBadge tag={p.tag} />
+                  <span className="text-sm font-medium text-slate-900 dark:text-white truncate">{p.title}</span>
                 </div>
                 <div className="flex items-center gap-3 mt-0.5 text-xs text-slate-400 dark:text-slate-500">
                   <span>{p.author}</span>

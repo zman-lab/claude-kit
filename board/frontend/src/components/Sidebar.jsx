@@ -8,7 +8,6 @@ export default function Sidebar({ open, onClose }) {
   const location = useLocation()
   const { dark, toggle } = useTheme()
   const [boards, setBoards] = useState([])
-  const [quickLinksOpen, setQuickLinksOpen] = useState(false)
 
   useEffect(() => {
     getBoards().then(setBoards).catch(() => {})
@@ -95,30 +94,6 @@ export default function Sidebar({ open, onClose }) {
             <span className="px-4 text-xs font-semibold text-slate-500 uppercase tracking-wider">System</span>
           </div>
           {navLink('/admin', 'Admin')}
-
-          {/* Quick Links */}
-          <button
-            onClick={() => setQuickLinksOpen(!quickLinksOpen)}
-            className="flex items-center justify-between w-full px-4 py-2 text-sm text-slate-400 hover:bg-slate-700/30 hover:text-slate-200 rounded-lg transition-colors"
-          >
-            Quick Links
-            <span className={`transition-transform ${quickLinksOpen ? 'rotate-90' : ''}`}>&#x203A;</span>
-          </button>
-          {quickLinksOpen && (
-            <div className="pl-6 space-y-0.5">
-              {[
-                { href: 'http://10.78.9.68:8079/', label: 'airlock' },
-                { href: 'http://localhost:7778/law/', label: 'law local' },
-                { href: 'http://localhost:17778/', label: 'elkhound local' },
-                { href: 'http://elkhound.hangame.com:7777/', label: 'elkhound alpha' },
-              ].map(l => (
-                <a key={l.label} href={l.href} target="_blank" rel="noreferrer"
-                  className="block px-4 py-1.5 text-xs text-slate-500 hover:text-slate-300 transition-colors">
-                  {l.label}
-                </a>
-              ))}
-            </div>
-          )}
 
           {/* Theme */}
           <button
