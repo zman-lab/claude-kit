@@ -33,8 +33,11 @@ export function ThemeProvider({ children }) {
 
   useEffect(() => {
     const root = document.documentElement
+    // 모든 테마 클래스 + CSS 변수 완전 초기화
     root.classList.remove('dark', 'custom')
     clearCustomTheme()
+    // inline style 잔여물 제거
+    root.removeAttribute('style')
 
     if (theme === 'dark') {
       root.classList.add('dark')
@@ -47,8 +50,9 @@ export function ThemeProvider({ children }) {
       )
       applyCustomTheme(palette)
     }
+    // light: 아무 클래스도 추가하지 않음 → Tailwind 기본 스타일
     localStorage.setItem('cb-theme', theme)
-  }, [theme])
+  }, [theme, customColors])
 
   const dark = theme === 'dark'
   const toggle = () => setThemeState(t => t === 'dark' ? 'light' : 'dark')
