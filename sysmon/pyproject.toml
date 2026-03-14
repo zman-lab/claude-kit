@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
+[project]
+name = "claude-kit-sysmon"
+version = "0.1.0"
+description = "On-demand system resource monitor with actionable insights"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "zman-lab"}]
+readme = "README.md"
+# 외부 의존성 없음 (Python 표준 라이브러리만)
+
+[project.optional-dependencies]
+fastapi = ["fastapi>=0.100.0"]
+dev = ["pytest>=7.0", "pytest-asyncio>=0.21"]
+
+[project.scripts]
+sysmon = "sysmon.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["sysmon*"]
+
+[tool.setuptools.package-data]
+sysmon = ["static/*.html"]
