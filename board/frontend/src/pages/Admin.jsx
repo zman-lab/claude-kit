@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { verifyPassword, getPasswords, createPassword, updatePassword, deletePassword as deletePw, downloadBackup, importBackup, getTeams, createTeam, updateTeam, deleteTeam } from '../utils/api.js'
 import { useToast } from '../contexts/ToastContext.jsx'
+import { useTheme } from '../contexts/ThemeContext.jsx'
+import { generatePalette } from '../utils/theme.js'
 import Spinner from '../components/Spinner.jsx'
 
 function AuthGate({ onAuth }) {
@@ -401,6 +403,169 @@ function BackupTab({ adminPw }) {
   )
 }
 
+function ThemeTab() {
+  const { theme, setTheme, customColors, setCustomColors } = useTheme()
+  const colors = {
+    primary: customColors.primary || '#6366f1',
+    bg: customColors.bg || '',
+    chart: customColors.chart || '',
+  }
+
+  const palette = generatePalette(colors.primary, colors.bg || null, colors.chart || null)
+
+  const updateColor = (key, value) => {
+    setCustomColors({ ...customColors, [key]: value })
+  }
+
+  const resetToDefault = () => {
+    setCustomColors({ primary: '#6366f1', bg: '', chart: '' })
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* 테마 모드 선택 */}
+      <div className="flex gap-3">
+        {[
+          { id: 'light', label: '\u2600\uFE0F Light' },
+          { id: 'dark', label: '\uD83C\uDF19 Dark' },
+          { id: 'custom', label: '\uD83C\uDFA8 Custom' },
+        ].map(t => (
+          <button
+            key={t.id}
+            onClick={() => setTheme(t.id)}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+              theme === t.id
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-750'
+            }`}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Custom 선택 시 컬러피커 */}
+      {theme === 'custom' && (
+        <div className="space-y-5">
+          {/* 색상 입력들 */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+                메인 색상 (사이드바, 버튼, 링크)
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={colors.primary}
+                  onChange={e => updateColor('primary', e.target.value)}
+                  className="w-10 h-10 rounded-lg cursor-pointer border border-slate-300"
+                />
+                <input
+                  type="text"
+                  value={colors.primary}
+                  onChange={e => updateColor('primary', e.target.value)}
+                  className="px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-sm font-mono w-28 dark:text-white"
+                />
+              </div>
+              <p className="text-xs text-slate-500 mt-1">이 색상을 기준으로 전체 팔레트가 자동 생성됩니다</p>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+                배경 톤 (선택)
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={colors.bg || '#fafafa'}
+                  onChange={e => updateColor('bg', e.target.value)}
+                  className="w-10 h-10 rounded-lg cursor-pointer border border-slate-300"
+                />
+                <input
+                  type="text"
+                  value={colors.bg}
+                  onChange={e => updateColor('bg', e.target.value)}
+                  className="px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-sm font-mono w-28 dark:text-white"
+                  placeholder="auto"
+                />
+                {colors.bg && (
+                  <button onClick={() => updateColor('bg', '')} className="text-xs text-slate-400 hover:text-red-500">clear</button>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-slate-700 dark:text-slate-200 mb-1">
+                차트 악센트 (선택)
+              </label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={colors.chart || colors.primary}
+                  onChange={e => updateColor('chart', e.target.value)}
+                  className="w-10 h-10 rounded-lg cursor-pointer border border-slate-300"
+                />
+                <input
+                  type="text"
+                  value={colors.chart}
+                  onChange={e => updateColor('chart', e.target.value)}
+                  className="px-2 py-1.5 border border-slate-300 dark:border-slate-600 rounded bg-white dark:bg-slate-700 text-sm font-mono w-28 dark:text-white"
+                  placeholder="auto"
+                />
+                {colors.chart && (
+                  <button onClick={() => updateColor('chart', '')} className="text-xs text-slate-400 hover:text-red-500">clear</button>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 미리보기 카드 */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">미리보기</h3>
+            <div className="rounded-xl overflow-hidden border" style={{ borderColor: palette.border }}>
+              {/* 사이드바 미리보기 */}
+              <div className="flex">
+                <div style={{ background: palette.sidebar, width: '140px', padding: '12px', minHeight: '160px' }} className="shrink-0">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div style={{ background: palette.primary, width: '20px', height: '20px', borderRadius: '4px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontSize: '8px', fontWeight: 'bold' }}>CB</div>
+                    <span style={{ color: '#fff', fontSize: '11px', fontWeight: '600' }}>Claude Board</span>
+                  </div>
+                  <div style={{ color: palette.sidebarText, fontSize: '10px', padding: '4px 8px', borderRadius: '4px', background: palette.sidebarHover, marginBottom: '4px' }}>Dashboard</div>
+                  <div style={{ color: palette.sidebarTextDim, fontSize: '10px', padding: '4px 8px' }}>Teams</div>
+                  <div style={{ color: palette.sidebarTextDim, fontSize: '10px', padding: '4px 8px' }}>Settings</div>
+                </div>
+                {/* 본문 미리보기 */}
+                <div style={{ background: palette.bg, flex: 1, padding: '12px' }}>
+                  <div style={{ background: palette.card, border: `1px solid ${palette.border}`, borderRadius: '8px', padding: '12px', marginBottom: '8px' }}>
+                    <span style={{ color: palette.text, fontSize: '12px', fontWeight: '600' }}>본문 텍스트</span>
+                    <p style={{ color: palette.textSecondary, fontSize: '10px', marginTop: '4px' }}>보조 텍스트 미리보기</p>
+                    <p style={{ color: palette.textDim, fontSize: '10px', marginTop: '2px' }}>흐린 텍스트 미리보기</p>
+                    <div className="flex gap-2 mt-3">
+                      <button style={{ background: palette.primary, color: '#fff', padding: '3px 10px', borderRadius: '6px', fontSize: '10px', border: 'none' }}>버튼</button>
+                      <button style={{ background: 'transparent', color: palette.primary, padding: '3px 10px', borderRadius: '6px', fontSize: '10px', border: `1px solid ${palette.primary}` }}>아웃라인</button>
+                    </div>
+                  </div>
+                  <div style={{ background: palette.primarySoft, borderRadius: '6px', padding: '8px', fontSize: '10px', color: palette.text }}>
+                    소프트 배경 카드
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 초기화 */}
+          <button
+            onClick={resetToDefault}
+            className="px-4 py-2 text-sm text-slate-500 hover:text-red-500 border border-slate-300 dark:border-slate-600 rounded-lg transition-colors"
+          >
+            기본값으로 초기화
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function Admin() {
   const [adminPw, setAdminPw] = useState(() => localStorage.getItem('cb-admin-pw') || '')
   const [authenticated, setAuthenticated] = useState(false)
@@ -423,6 +588,7 @@ export default function Admin() {
     { id: 'passwords', label: 'Passwords' },
     { id: 'teams', label: '팀 관리' },
     { id: 'backup', label: '백업 / 복원' },
+    { id: 'theme', label: '테마 설정' },
   ]
 
   return (
@@ -456,6 +622,7 @@ export default function Admin() {
       {tab === 'passwords' && <PasswordsTab adminPw={adminPw} />}
       {tab === 'teams' && <TeamsTab adminPw={adminPw} />}
       {tab === 'backup' && <BackupTab adminPw={adminPw} />}
+      {tab === 'theme' && <ThemeTab />}
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { createPost, getBoards, uploadAttachment } from '../utils/api.js'
-import { renderMarkdown } from '../utils/markdown.js'
+import { renderMarkdown, replaceFileTags } from '../utils/markdown.js'
+import { useFileAutocomplete } from '../hooks/useFileAutocomplete.js'
 import { useToast } from '../contexts/ToastContext.jsx'
 
 const TAGS = ['work', 'todo', 'issue', 'done', 'knowhow']
@@ -20,6 +21,13 @@ export default function NewPost() {
   const [submitting, setSubmitting] = useState(false)
   const [pendingFiles, setPendingFiles] = useState([])
   const textareaRef = useRef(null)
+
+  // pendingFiles를 {filename} 형태로 변환하여 자동완성 후보로 사용
+  const autocompleteFiles = pendingFiles.map(f => ({ filename: f.name }))
+  const autocomplete = useFileAutocomplete(
+    textareaRef, content, setContent,
+    autocompleteFiles
+  )
 
   useEffect(() => {
     getBoards().then(boards => {
@@ -166,18 +174,35 @@ export default function NewPost() {
           {preview ? (
             <div
               className="min-h-[200px] px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-slate-50 dark:bg-slate-900 markdown-body text-sm text-slate-700 dark:text-slate-200"
-              dangerouslySetInnerHTML={{ __html: renderMarkdown(content) }}
+              dangerouslySetInnerHTML={{ __html: renderMarkdown(replaceFileTags(content, autocompleteFiles.map((f, i) => ({ ...f, id: `pending-${i}` })))) }}
             />
           ) : (
-            <textarea
-              ref={textareaRef}
-              value={content}
-              onChange={e => setContent(e.target.value)}
-              onPaste={handlePaste}
-              placeholder="Write your post in Markdown... (이미지 붙여넣기 가능)"
-              rows={12}
-              className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white font-mono resize-y"
-            />
+            <div className="relative">
+              <textarea
+                ref={textareaRef}
+                value={content}
+                onChange={e => setContent(e.target.value)}
+                onKeyDown={autocomplete.handleKeyDown}
+                onPaste={handlePaste}
+                placeholder="Write your post in Markdown... (이미지 붙여넣기 가능, {# 로 파일 태그)"
+                rows={12}
+                className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white font-mono resize-y"
+              />
+              {autocomplete.show && autocomplete.filtered.length > 0 && (
+                <div className="absolute z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-40 overflow-y-auto"
+                  style={{ top: autocomplete.position.top, left: autocomplete.position.left, minWidth: '200px' }}>
+                  {autocomplete.filtered.map((file, i) => (
+                    <button key={file.filename}
+                      onClick={() => autocomplete.select(file)}
+                      className={`block w-full text-left px-3 py-1.5 text-sm ${
+                        i === autocomplete.selectedIdx ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                      }`}>
+                      {/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.filename) ? '🖼️' : '📎'} {file.filename}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           )}
         </div>
 

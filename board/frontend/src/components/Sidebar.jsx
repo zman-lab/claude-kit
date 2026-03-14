@@ -6,7 +6,7 @@ import TeamDot from './TeamDot.jsx'
 
 export default function Sidebar({ open, onClose }) {
   const location = useLocation()
-  const { dark, toggle } = useTheme()
+  const { theme, setTheme } = useTheme()
   const [boards, setBoards] = useState([])
 
   useEffect(() => {
@@ -96,12 +96,24 @@ export default function Sidebar({ open, onClose }) {
           {navLink('/admin', 'Admin')}
 
           {/* Theme */}
-          <button
-            onClick={toggle}
-            className="flex items-center gap-2 w-full px-4 py-2 text-sm text-slate-400 hover:bg-slate-700/30 hover:text-slate-200 rounded-lg transition-colors"
-          >
-            {dark ? '☀️ Light' : '🌙 Dark'}
-          </button>
+          <div className="flex gap-1 px-4 py-2">
+            {[
+              { id: 'light', icon: '\u2600\uFE0F' },
+              { id: 'dark', icon: '\uD83C\uDF19' },
+              { id: 'custom', icon: '\uD83C\uDFA8' },
+            ].map(t => (
+              <button
+                key={t.id}
+                onClick={() => setTheme(t.id)}
+                className={`px-2 py-1.5 rounded text-xs transition-colors ${
+                  theme === t.id ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
+                }`}
+                title={t.id}
+              >
+                {t.icon}
+              </button>
+            ))}
+          </div>
         </div>
       </aside>
     </>

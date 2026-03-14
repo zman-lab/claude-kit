@@ -238,30 +238,66 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Recent activity */}
+      {/* Recent activity — 게시글 / 댓글 2컬럼 */}
       {isVisible('recentActivity') && (
-        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
-          <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Recent Activity</h3>
-          <div className="divide-y divide-slate-100 dark:divide-slate-700">
-            {activity?.map((item, i) => (
-              <div key={i} className="py-2.5 flex items-start gap-3">
-                <div className="shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-xs">
-                  {item.type === 'post' ? '📝' : item.type === 'reply' ? '💬' : '❤️'}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{item.author}</span>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* 최근 게시글 */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Recent Posts</h3>
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {activity?.filter(item => item.type === 'post').length > 0 ? (
+                activity.filter(item => item.type === 'post').slice(0, 8).map((item, i) => (
+                  <div key={i} className="py-2.5 flex items-start gap-3">
+                    <div className="shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-xs">
+                      📝
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{item.author}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {item.tag && <TagBadge tag={item.tag} />}
+                        <Link to={`/posts/${item.id}`} className="text-sm text-slate-900 dark:text-white hover:text-blue-500 line-clamp-1">
+                          {item.title || stripMarkdown(item.content)}
+                        </Link>
+                      </div>
+                    </div>
+                    <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">{timeAgo(item.created_at)}</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    {item.tag && <TagBadge tag={item.tag} />}
-                    <Link to={`/posts/${item.post_id || item.id}`} className="text-sm text-slate-900 dark:text-white hover:text-blue-500 line-clamp-1">
-                      {item.title || stripMarkdown(item.content)}
-                    </Link>
+                ))
+              ) : (
+                <p className="py-4 text-sm text-slate-400 dark:text-slate-500 text-center">게시글이 없습니다</p>
+              )}
+            </div>
+          </div>
+
+          {/* 최근 댓글 */}
+          <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 p-5 shadow-sm">
+            <h3 className="text-sm font-semibold text-slate-700 dark:text-slate-200 mb-3">Recent Replies</h3>
+            <div className="divide-y divide-slate-100 dark:divide-slate-700">
+              {activity?.filter(item => item.type === 'reply').length > 0 ? (
+                activity.filter(item => item.type === 'reply').slice(0, 8).map((item, i) => (
+                  <div key={i} className="py-2.5 flex items-start gap-3">
+                    <div className="shrink-0 w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-xs">
+                      💬
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-medium text-slate-600 dark:text-slate-300">{item.author}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Link to={`/posts/${item.post_id}`} className="text-sm text-slate-900 dark:text-white hover:text-blue-500 line-clamp-1">
+                          {stripMarkdown(item.content)}
+                        </Link>
+                      </div>
+                    </div>
+                    <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">{timeAgo(item.created_at)}</span>
                   </div>
-                </div>
-                <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0">{timeAgo(item.created_at)}</span>
-              </div>
-            ))}
+                ))
+              ) : (
+                <p className="py-4 text-sm text-slate-400 dark:text-slate-500 text-center">댓글이 없습니다</p>
+              )}
+            </div>
           </div>
         </div>
       )}

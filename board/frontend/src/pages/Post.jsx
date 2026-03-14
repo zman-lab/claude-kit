@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { getPost, toggleLike, createReply, updatePost, deletePost, updateReply, deleteReply, uploadAttachment, getAttachments } from '../utils/api.js'
 import { timeAgo, formatDate } from '../utils/time.js'
-import { renderMarkdown } from '../utils/markdown.js'
+import { renderMarkdown, replaceFileTags } from '../utils/markdown.js'
+import { useFileAutocomplete } from '../hooks/useFileAutocomplete.js'
 import { printContent } from '../utils/print.js'
 import { useToast } from '../contexts/ToastContext.jsx'
 import Spinner from '../components/Spinner.jsx'
@@ -28,6 +29,12 @@ export default function PostPage() {
   const [replyPendingFiles, setReplyPendingFiles] = useState([])
   const fileInputRef = useRef(null)
   const replyFileInputRef = useRef(null)
+  const replyTextareaRef = useRef(null)
+
+  const autocomplete = useFileAutocomplete(
+    replyTextareaRef, replyContent, setReplyContent,
+    attachments
+  )
 
   const load = async () => {
     try {
@@ -276,13 +283,13 @@ export default function PostPage() {
                     {showPrint && (
                       <div className="absolute right-0 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg p-1 z-50 min-w-[120px]">
                         <button
-                          onClick={() => { printContent(post.title, `<h1>${post.title}</h1>` + renderMarkdown(post.content)); setShowPrint(false) }}
+                          onClick={() => { printContent(post.title, `<h1>${post.title}</h1>` + renderMarkdown(replaceFileTags(post.content, attachments))); setShowPrint(false) }}
                           className="block text-xs py-1.5 px-3 hover:bg-slate-100 dark:hover:bg-slate-700 w-full text-left rounded text-slate-700 dark:text-slate-200"
                         >
                           본문만
                         </button>
                         <button
-                          onClick={() => { printContent(post.title, `<h1>${post.title}</h1>` + renderMarkdown(post.content) + buildRepliesHtml()); setShowPrint(false) }}
+                          onClick={() => { printContent(post.title, `<h1>${post.title}</h1>` + renderMarkdown(replaceFileTags(post.content, attachments)) + buildRepliesHtml()); setShowPrint(false) }}
                           className="block text-xs py-1.5 px-3 hover:bg-slate-100 dark:hover:bg-slate-700 w-full text-left rounded text-slate-700 dark:text-slate-200"
                         >
                           댓글 포함
@@ -310,7 +317,7 @@ export default function PostPage() {
               {/* Content */}
               <div
                 className="mt-5 markdown-body text-sm text-slate-700 dark:text-slate-200 leading-relaxed"
-                dangerouslySetInnerHTML={{ __html: renderMarkdown(post.content) }}
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(replaceFileTags(post.content, attachments)) }}
               />
 
               {/* Attachments */}
@@ -418,7 +425,7 @@ export default function PostPage() {
                 </div>
                 <div
                   className="markdown-body text-sm text-slate-700 dark:text-slate-200"
-                  dangerouslySetInnerHTML={{ __html: renderMarkdown(r.content) }}
+                  dangerouslySetInnerHTML={{ __html: renderMarkdown(replaceFileTags(r.content, r.attachments || [])) }}
                 />
                 {/* Reply attachments */}
                 {r.attachments?.length > 0 && (
@@ -471,14 +478,32 @@ export default function PostPage() {
             className="w-32 px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white"
           />
         </div>
-        <textarea
-          value={replyContent}
-          onChange={e => setReplyContent(e.target.value)}
-          onPaste={handlePaste}
-          placeholder="Write a comment... (Markdown supported, paste images)"
-          rows={3}
-          className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white resize-y"
-        />
+        <div className="relative">
+          <textarea
+            ref={replyTextareaRef}
+            value={replyContent}
+            onChange={e => setReplyContent(e.target.value)}
+            onKeyDown={autocomplete.handleKeyDown}
+            onPaste={handlePaste}
+            placeholder="Write a comment... (Markdown supported, paste images, {# for file tags)"
+            rows={3}
+            className="w-full px-3 py-2 border border-slate-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-sm text-slate-900 dark:text-white resize-y"
+          />
+          {autocomplete.show && autocomplete.filtered.length > 0 && (
+            <div className="absolute z-50 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg shadow-lg max-h-40 overflow-y-auto"
+              style={{ top: autocomplete.position.top, left: autocomplete.position.left, minWidth: '200px' }}>
+              {autocomplete.filtered.map((file, i) => (
+                <button key={file.filename}
+                  onClick={() => autocomplete.select(file)}
+                  className={`block w-full text-left px-3 py-1.5 text-sm ${
+                    i === autocomplete.selectedIdx ? 'bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'
+                  }`}>
+                  {/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(file.filename) ? '🖼️' : '📎'} {file.filename}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         {/* Reply pending files */}
         <div className="flex items-center gap-2 flex-wrap">
           <label className="cursor-pointer text-xs text-blue-600 hover:text-blue-700">

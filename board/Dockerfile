@@ -13,8 +13,7 @@ COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 COPY app/ ./app/
 COPY mcp/ ./mcp/
-COPY --from=frontend /app/frontend/dist ./static/dist
-# React SPA 서빙을 위해 dist를 static으로 복사
+COPY --from=frontend /app/frontend/dist ./frontend/dist
 
 ENV PORT=8585
 EXPOSE $PORT
