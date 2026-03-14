@@ -1,0 +1,12 @@
+services:
+  board:
+    build: .
+    # 또는 image: ghcr.io/zman-lab/claude-kit-board:latest
+    ports:
+      - "${BOARD_PORT:-8585}:8585"
+    volumes:
+      - ./data:/app/data
+    restart: always
+    environment:
+      - DATABASE_URL=sqlite:///data/board.db
+      - MCP_MODE=sse

@@ -1,0 +1,35 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+
+# Node
+node_modules/
+board/frontend/node_modules/
+
+# Data (런타임 생성)
+data/
+*.db
+*.db-journal
+
+# Uploads
+uploads/
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Backups
+backups/
+
+# Build
+# board/frontend/dist/ 는 포함 (Docker에서 사용)
