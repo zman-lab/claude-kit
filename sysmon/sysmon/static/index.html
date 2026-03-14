@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="ko"><head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>System Monitor</title>
+<style>
+:root{--bg:#0c0e14;--card:#151821;--border:#1e2231;--text:#e8e8ec;--dim:#6b7084;
+--red:#f04e53;--orange:#f0923e;--yellow:#e8c840;--green:#3dd68c;--blue:#4d9cf0;
+--purple:#9b6df0;--cyan:#3dc8d0;--pink:#e86090}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'SF Pro Display',sans-serif;background:var(--bg);color:var(--text);padding:20px 24px;line-height:1.5}
+
+/* Header */
+.hdr{display:flex;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.hdr h1{font-size:20px;font-weight:700}.hdr .spec{font-size:12px;color:var(--dim)}
+.hdr .right{margin-left:auto;display:flex;align-items:center;gap:12px}
+.live{font-size:12px;color:var(--green);display:flex;align-items:center;gap:5px}
+.live::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:5px 12px;border-radius:6px;font-size:11px;cursor:pointer;transition:.15s}
+.btn:hover{background:#1e2231;border-color:var(--blue)}
+
+/* Tabs */
+.tabs{display:flex;gap:2px;margin-bottom:16px}
+.tab{padding:8px 20px;font-size:12px;font-weight:600;background:var(--card);border:1px solid var(--border);border-bottom:2px solid transparent;border-radius:8px 8px 0 0;cursor:pointer;color:var(--dim);transition:.15s;user-select:none}
+.tab:hover{color:var(--text)}.tab.on{color:var(--text);background:#1a1e2a;border-bottom-color:var(--blue)}
+.pane{display:none}.pane.on{display:block}
+
+/* Cards */
+.section{font-size:10px;text-transform:uppercase;letter-spacing:.08em;color:var(--dim);margin:20px 0 8px;display:flex;align-items:center;gap:8px}
+.section::after{content:'';flex:1;height:1px;background:var(--border)}
+.card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:10px}
+.card-t{font-size:10px;text-transform:uppercase;letter-spacing:.04em;color:var(--dim);margin-bottom:8px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.g4{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th{text-align:left;font-weight:500;color:var(--dim);padding:6px 10px;border-bottom:1px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.04em}
+td{padding:6px 10px;border-bottom:1px solid #13151d;font-variant-numeric:tabular-nums}
+tr:last-child td{border-bottom:none}
+.tag{display:inline-block;padding:2px 6px;border-radius:4px;font-size:10px;font-weight:600}
+.sub{font-size:11px;color:var(--dim);margin-top:2px}
+
+/* Bars */
+.bar-t{height:5px;background:#1e2231;border-radius:3px;overflow:hidden;margin-top:4px}
+.bar-v{height:100%;border-radius:3px;transition:width .4s}
+.bar-label{display:flex;justify-content:space-between;font-size:11px;margin-bottom:3px}
+.bar-label span:last-child{color:var(--dim)}
+
+/* Charts */
+.chart-wrap{position:relative;height:120px;margin-top:6px}
+.chart-wrap canvas{width:100%;height:100%}
+.chart-val{position:absolute;top:8px;right:12px;font-size:28px;font-weight:800;font-variant-numeric:tabular-nums}
+.chart-sub{position:absolute;top:40px;right:12px;font-size:11px;color:var(--dim)}
+
+/* Treemap flex */
+.treemap{display:flex;gap:3px;height:110px;margin-bottom:16px}
+.tm{border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;justify-content:center;min-width:28px;transition:flex .4s;position:relative;overflow:visible}
+.tm .n{font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.tm .v{font-size:15px;font-weight:800;line-height:1.1;overflow:hidden}.tm .d{font-size:9px;opacity:.7;overflow:hidden}
+.tm .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#252836;border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;white-space:nowrap;z-index:100;pointer-events:none;color:var(--text);box-shadow:0 4px 12px rgba(0,0,0,.4)}
+.tm .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#252836}
+.tm:hover .tip{display:block}
+
+/* MCP grid */
+.mcp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:8px}
+.mcp-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px}
+.mcp-card .top{display:flex;justify-content:space-between;align-items:baseline}
+.mcp-card .svc{font-size:11px;font-weight:600}.mcp-card .mem{font-size:16px;font-weight:800;color:var(--red)}
+.mcp-card .cnt{font-size:10px;color:var(--dim)}
+
+/* Insights */
+.ins{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:8px;position:relative;overflow:hidden}
+.ins::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%}
+.ins.critical::before{background:var(--red)}.ins.warning::before{background:var(--orange)}
+.ins.info::before{background:var(--blue)}.ins.summary::before{background:var(--green)}
+.ins h3{font-size:13px;font-weight:700;margin-bottom:3px}
+.ins .desc{font-size:11px;color:var(--dim);white-space:pre-line;line-height:1.5}
+.ins .acts{margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.btn-act{padding:6px 14px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:.15s;background:rgba(240,78,83,.12);color:var(--red);border:1px solid rgba(240,78,83,.25)}
+.btn-act:hover{background:rgba(240,78,83,.22)}
+.btn-act.running{opacity:.5;pointer-events:none}
+.act-effect{font-size:10px;color:var(--dim)}
+
+/* Stacked bar */
+.sbar{display:flex;height:12px;border-radius:3px;overflow:hidden;min-width:140px}
+
+/* Modal */
+.modal-bg{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:1000;backdrop-filter:blur(3px)}
+.modal-bg.show{display:flex}
+.modal{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:22px;width:90%;max-width:520px;max-height:80vh;overflow-y:auto}
+.modal h2{font-size:15px;font-weight:700;margin-bottom:10px}
+.modal .log{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;font-family:'SF Mono',Menlo,monospace;font-size:11px;line-height:1.6;white-space:pre-wrap;max-height:260px;overflow-y:auto}
+.modal .meta{margin-top:10px;font-size:10px;color:var(--dim);display:flex;justify-content:space-between}
+.modal .btn-close{margin-top:12px;width:100%;padding:9px;background:rgba(61,214,140,.1);color:var(--green);border:1px solid rgba(61,214,140,.2);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}
+
+/* Confirm dialog */
+.confirm-body{font-size:12px;line-height:1.7;white-space:pre-line;margin:12px 0;padding:12px;background:var(--bg);border-radius:8px;border:1px solid var(--border)}
+.confirm-btns{display:flex;gap:8px;margin-top:12px}
+.confirm-btns .btn-cancel{flex:1;padding:9px;background:var(--card);border:1px solid var(--border);color:var(--dim);border-radius:8px;font-size:12px;cursor:pointer}
+.confirm-btns .btn-go{flex:1;padding:9px;background:rgba(240,78,83,.15);color:var(--red);border:1px solid rgba(240,78,83,.3);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer}
+.exec-spinner{width:36px;height:36px;border:3px solid var(--border);border-top-color:var(--orange);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.stat{display:flex;flex-direction:column;gap:1px}
+.stat .l{font-size:10px;color:var(--dim)}.stat .v{font-size:14px;font-weight:600}
+
+#loading{text-align:center;padding:60px;color:var(--dim);font-size:13px}
+@media(max-width:800px){.g2,.g3,.g4{grid-template-columns:1fr}.treemap{flex-wrap:wrap;height:auto}}
+</style>
+</head><body>
+
+<div class="hdr">
+  <h1>System Monitor</h1>
+  <span class="spec" id="spec">loading...</span>
+  <div class="right">
+    <span style="font-size:10px;color:var(--dim)" id="poll-status">CPU/RAM 5초 갱신</span>
+    <button class="btn" onclick="fullRefresh()">Full Refresh</button>
+    <span class="live" id="clock">--:--</span>
+  </div>
+</div>
+<div class="tabs">
+  <div class="tab on" onclick="tab('ov')">Overview</div>
+  <div class="tab" onclick="tab('ma')">Memory Analysis</div>
+</div>
+<div id="loading">수집 중...</div>
+<div class="pane on" id="p-ov"></div>
+<div class="pane" id="p-ma"></div>
+
+<!-- Confirm + Execute dialog (single modal, state transitions) -->
+<div class="modal-bg" id="confirm"><div class="modal">
+  <h2 id="c-title">실행 확인</h2>
+  <!-- Phase 1: Confirm -->
+  <div id="c-phase-confirm">
+    <div class="confirm-body" id="c-body"></div>
+    <div id="c-sudo-wrap" style="display:none;margin:10px 0">
+      <label style="font-size:11px;color:var(--dim)">macOS 비밀번호 (sudo)</label>
+      <input type="password" id="c-sudo-pw" placeholder="비밀번호 입력" style="width:100%;margin-top:4px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none" autocomplete="off"/>
+    </div>
+    <div class="confirm-btns">
+      <button class="btn-cancel" onclick="closeConfirm()">취소</button>
+      <button class="btn-go" id="c-go" onclick="execConfirmed()">실행</button>
+    </div>
+  </div>
+  <!-- Phase 2: Running -->
+  <div id="c-phase-running" style="display:none;text-align:center;padding:30px 0">
+    <div class="exec-spinner"></div>
+    <div style="margin-top:14px;font-size:13px;color:var(--orange)">실행 중... 잠시만 기다려주세요</div>
+    <div style="margin-top:6px;font-size:11px;color:var(--dim)" id="c-elapsed">0초</div>
+  </div>
+  <!-- Phase 3: Done -->
+  <div id="c-phase-done" style="display:none">
+    <div class="log" id="c-log"></div>
+    <div class="meta"><span id="c-dur"></span><span id="c-time"></span></div>
+    <button class="btn-close" onclick="closeConfirm()" style="margin-top:12px">닫기</button>
+  </div>
+</div></div>
+
+<script>
+let D=null, cpuHist=[], ramHist=[], MAX_HIST=60, pollTimer=null, pendingAction=null;
+
+function tab(id){
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===(id==='ov'?0:1)));
+  document.getElementById('p-ov').classList.toggle('on',id==='ov');
+  document.getElementById('p-ma').classList.toggle('on',id==='ma');
+}
+
+function pctColor(p){return p>=90?'var(--red)':p>=70?'var(--orange)':p>=50?'var(--yellow)':'var(--green)'}
+
+// ─── Canvas Chart ───
+function drawChart(canvas, data, color, maxVal) {
+  if(!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width = canvas.offsetWidth * 2;
+  const H = canvas.height = canvas.offsetHeight * 2;
+  ctx.clearRect(0,0,W,H);
+  if(data.length<2) return;
+
+  const pad = {t:10,b:20,l:0,r:0};
+  const cw = W-pad.l-pad.r, ch = H-pad.t-pad.b;
+
+  // Grid lines
+  ctx.strokeStyle = '#1e2231'; ctx.lineWidth = 1;
+  for(let i=0;i<=4;i++){
+    const y = pad.t + (ch/4)*i;
+    ctx.beginPath(); ctx.moveTo(pad.l,y); ctx.lineTo(W-pad.r,y); ctx.stroke();
+  }
+
+  // Parse color
+  const rgb = color==='var(--green)'?'61,214,140':color==='var(--red)'?'240,78,83':'240,146,62';
+
+  // Line
+  ctx.beginPath();
+  ctx.strokeStyle = `rgba(${rgb},0.8)`; ctx.lineWidth = 3; ctx.lineJoin='round';
+  const step = cw / (MAX_HIST-1);
+  const startIdx = Math.max(0, data.length - MAX_HIST);
+  for(let i=startIdx;i<data.length;i++){
+    const x = pad.l + (i-startIdx)*step;
+    const y = pad.t + ch - (data[i]/maxVal)*ch;
+    i===startIdx ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+
+  // Fill
+  const lastX = pad.l + (data.length-1-startIdx)*step;
+  ctx.lineTo(lastX, H-pad.b); ctx.lineTo(pad.l, H-pad.b); ctx.closePath();
+  ctx.fillStyle = `rgba(${rgb},0.08)`; ctx.fill();
+}
+
+// ─── Render Overview ───
+function renderOV(){
+  if(!D) return;
+  const m=D, c=m.cpu, mem=m.memory, dk=m.disk;
+  const cpuPct = Math.round(c.user+c.sys);
+  let h='';
+
+  if(mem.pressure_pct>=90)
+    h+=`<div style="background:linear-gradient(90deg,rgba(240,78,83,.1),rgba(240,78,83,.03));border:1px solid rgba(240,78,83,.2);border-radius:8px;padding:10px 16px;margin-bottom:12px;font-size:12px"><strong style="color:var(--red)">RAM ${mem.pressure_pct}%</strong> — ${mem.used_gb}G / ${mem.total_gb}G · compressor ${mem.compressed_gb}G · <span style="color:var(--dim)">Memory Analysis 탭에서 해결</span></div>`;
+
+  // CPU + RAM charts
+  h+=`<div class="g2">
+    <div class="card"><div class="card-t">CPU Usage</div>
+      <div class="chart-wrap"><canvas id="cv-cpu"></canvas>
+        <div class="chart-val" id="cv-cpu-val" style="color:${pctColor(cpuPct)}">${cpuPct}%</div>
+        <div class="chart-sub">user ${c.user}% · sys ${c.sys}%</div>
+      </div></div>
+    <div class="card"><div class="card-t">Memory</div>
+      <div class="chart-wrap"><canvas id="cv-ram"></canvas>
+        <div class="chart-val" id="cv-ram-val" style="color:${pctColor(mem.pressure_pct)}">${mem.pressure_pct}%</div>
+        <div class="chart-sub">${mem.used_gb}G / ${mem.total_gb}G · comp ${mem.compressed_gb}G</div>
+      </div></div>
+  </div>`;
+
+  // Grid: Disk, Load, Docker, Processes
+  h+=`<div class="g4">
+    <div class="card"><div class="card-t">Disk</div>
+      <div style="font-size:24px;font-weight:800;color:var(--blue)">${dk.pct}%</div>
+      <div class="sub">${dk.used_gb}G / ${dk.total_gb}G · ${dk.free_gb}G free</div></div>
+    <div class="card"><div class="card-t">Load Avg</div>
+      <div style="display:flex;gap:6px;margin-top:4px">
+        <div style="flex:1;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--yellow)">${c.load_1m}</div><div class="sub">1m</div></div>
+        <div style="flex:1;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--yellow)">${c.load_5m}</div><div class="sub">5m</div></div>
+        <div style="flex:1;text-align:center"><div style="font-size:18px;font-weight:700;color:var(--yellow)">${c.load_15m}</div><div class="sub">15m</div></div>
+      </div></div>
+    <div class="card"><div class="card-t">Docker</div>
+      <div style="font-size:24px;font-weight:800;color:var(--purple)">${m.docker.count}</div>
+      <div class="sub">${m.docker.total_mb>=1024?(m.docker.total_mb/1024).toFixed(1)+' GB':m.docker.total_mb+' MB'} total</div></div>
+    <div class="card"><div class="card-t">Processes</div>
+      <div style="font-size:24px;font-weight:800">${c.processes}</div>
+      <div class="sub">${c.threads.toLocaleString()} threads</div></div>
+  </div>`;
+
+  // Memory by category
+  const cats=[{n:'MCP Servers',v:m.mcp.total_mb,c:'var(--red)',cnt:m.mcp.total_count},
+    {n:'Claude CLI',v:m.claude.total_mb,c:'var(--green)',cnt:m.claude.total_count}];
+  const co={security:'보안SW',chrome:'Chrome',docker:'Docker VM',warp:'Warp',ide:'IDE',system:'System',kakaotalk:'KakaoTalk',other:'기타'};
+  const cc={security:'var(--purple)',chrome:'var(--cyan)',docker:'var(--blue)',warp:'var(--blue)',ide:'var(--orange)',system:'var(--yellow)',kakaotalk:'var(--pink)',other:'var(--dim)'};
+  ['security','chrome','docker','warp','ide','system','kakaotalk','other'].forEach(k=>{if(m.categories[k])cats.push({n:co[k],v:m.categories[k].total_mb,c:cc[k],cnt:m.categories[k].count})});
+  const mx=Math.max(...cats.map(c=>c.v));
+  h+='<div class="card"><div class="card-t">Memory by Category</div>';
+  cats.forEach(cat=>{
+    const vt=cat.v>=1024?(cat.v/1024).toFixed(1)+' GB':cat.v+' MB';
+    h+=`<div style="margin-top:6px"><div class="bar-label"><span>${cat.n} (${cat.cnt})</span><span>${vt}</span></div><div class="bar-t"><div class="bar-v" style="width:${(cat.v/mx*100)}%;background:${cat.c}"></div></div></div>`;
+  });
+  h+='</div>';
+
+  document.getElementById('p-ov').innerHTML=h;
+  // Draw charts after DOM update
+  setTimeout(()=>{
+    drawChart(document.getElementById('cv-cpu'), cpuHist, 'var(--green)', 100);
+    drawChart(document.getElementById('cv-ram'), ramHist, 'var(--red)', 100);
+  },50);
+}
+
+// ─── Render Analysis ───
+function renderMA(){
+  if(!D) return;
+  const m=D, mem=m.memory, mcp=m.mcp, cl=m.claude;
+  let h='';
+
+  h+=`<div style="background:linear-gradient(90deg,rgba(240,78,83,.1),rgba(240,78,83,.03));border:1px solid rgba(240,78,83,.2);border-radius:8px;padding:10px 16px;margin-bottom:12px;font-size:12px">
+    <strong style="color:var(--red)">MCP ${mcp.total_count}개</strong> = ${(mcp.total_mb/1024).toFixed(1)} GB &nbsp;·&nbsp; Claude ${cl.total_count}개 = ${(cl.total_mb/1024).toFixed(1)} GB
+    <span style="float:right;color:var(--dim)">${cl.total_count} 세션 × MCP 7종 = ${mcp.total_count}개</span></div>`;
+
+  // Treemap
+  h+='<div class="section">메모리 지도</div>';
+  const tot=mem.total_gb;
+  const blocks=[
+    {n:'MCP',v:mcp.total_mb/1024,c:'rgba(240,78,83,.2)',bc:'rgba(240,78,83,.35)',tc:'var(--red)',d:mcp.total_count+'개'},
+    {n:'Claude',v:cl.total_mb/1024,c:'rgba(61,214,140,.15)',bc:'rgba(61,214,140,.3)',tc:'var(--green)',d:cl.total_count+'개'},
+    {n:'Cache',v:mem.inactive_gb,c:'rgba(77,156,240,.1)',bc:'rgba(77,156,240,.2)',tc:'var(--blue)',d:'회수가능'},
+    {n:'Compressed',v:mem.compressed_gb,c:'rgba(240,146,62,.12)',bc:'rgba(240,146,62,.25)',tc:'var(--orange)',d:''},
+    {n:'Wired',v:mem.wired_gb,c:'rgba(232,200,64,.12)',bc:'rgba(232,200,64,.25)',tc:'var(--yellow)',d:'커널'},
+  ];
+  ['security','chrome','docker'].forEach(k=>{
+    if(!m.categories[k]) return;
+    const cs={security:['rgba(155,109,240,.12)','rgba(155,109,240,.25)','var(--purple)','보안SW'],chrome:['rgba(61,200,208,.12)','rgba(61,200,208,.25)','var(--cyan)','Chrome'],docker:['rgba(77,156,240,.12)','rgba(77,156,240,.25)','var(--blue)','Docker']};
+    const c=cs[k]; blocks.push({n:c[3],v:m.categories[k].total_mb/1024,c:c[0],bc:c[1],tc:c[2],d:''});
+  });
+  blocks.push({n:'Free',v:mem.free_gb,c:'rgba(61,214,140,.08)',bc:'rgba(61,214,140,.15)',tc:'var(--green)',d:''});
+
+  h+='<div class="treemap">';
+  blocks.forEach(b=>{
+    const flex=(b.v/tot*100).toFixed(1);
+    const sizeStr=b.v>=1?b.v.toFixed(1)+'GB':(b.v*1024).toFixed(0)+'MB';
+    const tipText=`${b.n}: ${sizeStr}${b.d?' — '+b.d:''}`;
+    h+=`<div class="tm" style="flex:${flex};background:${b.c};border:1px solid ${b.bc}">
+      <div class="tip">${tipText}</div>
+      <div class="n" style="color:${b.tc}">${b.n}</div><div class="v" style="color:${b.tc}">${b.v>=1?b.v.toFixed(1)+'G':(b.v*1024).toFixed(0)+'M'}</div><div class="d">${b.d}</div></div>`;
+  });
+  h+='</div>';
+
+  // MCP breakdown
+  h+=`<div class="section">MCP 서버별 (${mcp.total_count}개, ${(mcp.total_mb/1024).toFixed(1)} GB)</div><div class="mcp-grid">`;
+  const maxM=Math.max(...Object.values(mcp.breakdown).map(v=>v.total_mb));
+  Object.entries(mcp.breakdown).sort((a,b)=>b[1].total_mb-a[1].total_mb).forEach(([name,info])=>{
+    if(!info.count) return;
+    const vt=info.total_mb>=1024?(info.total_mb/1024).toFixed(1)+'G':info.total_mb+'M';
+    h+=`<div class="mcp-card"><div class="top"><span class="svc">${name}</span><span class="mem">${vt}</span></div><div class="cnt">${info.count}개</div><div class="bar-t"><div class="bar-v" style="width:${(info.total_mb/maxM*100)}%"></div></div></div>`;
+  });
+  h+='</div>';
+
+  // Claude sessions
+  h+=`<div class="section">Claude 세션 — 메인 ${cl.main_count}개 (터미널) + 서브에이전트 ${cl.sub_count}개 (자동생성) = ${cl.total_count}개</div><table><thead><tr><th>PID</th><th>Type</th><th>Args</th><th>Memory</th><th>Claude vs MCP</th></tr></thead><tbody>`;
+  cl.sessions.forEach(s=>{
+    const tc=s.type==='main'?'background:rgba(61,214,140,.15);color:var(--green)':'background:rgba(77,156,240,.12);color:var(--blue)';
+    const cp=Math.round(s.rss_mb/(s.rss_mb+570)*100);
+    h+=`<tr><td>${s.pid}</td><td><span class="tag" style="${tc}">${s.type}</span></td><td style="font-size:10px">${s.args||'-'}</td><td style="font-weight:600">${s.rss_mb}MB</td>
+      <td><div class="sbar"><div style="width:${cp}%;background:var(--green)"></div><div style="width:${100-cp}%;background:var(--red)"></div></div></td></tr>`;
+  });
+  h+='</tbody></table>';
+
+  // Insights
+  h+='<div class="section">인사이트 + 해결</div>';
+  m.insights.forEach(ins=>{
+    h+=`<div class="ins ${ins.severity}"><h3>${ins.title}</h3><div class="desc">${ins.description}</div>`;
+    if(ins.actions?.length){
+      h+='<div class="acts">';
+      ins.actions.forEach(a=>{
+        h+=`<button class="btn-act" onclick="confirmAction('${a.id}','${a.label}',\`${(a.confirm||'').replace(/`/g,"'")}\`)">
+          ${a.label}</button><span class="act-effect">${a.effect}</span>`;
+      });
+      h+='</div>';
+    }
+    h+='</div>';
+  });
+
+  document.getElementById('p-ma').innerHTML=h;
+}
+
+// ─── Data fetching ───
+async function fetchFull(){
+  const r=await fetch('/api/metrics'); D=await r.json();
+  document.getElementById('spec').textContent=`${D.system.chip} · ${D.system.cores} cores · ${D.memory.total_gb}GB · ${D.collect_ms}ms`;
+  cpuHist.push(Math.round(D.cpu.user+D.cpu.sys));
+  ramHist.push(D.memory.pressure_pct);
+  document.getElementById('loading').style.display='none';
+  renderOV(); renderMA();
+}
+
+async function quickPoll(){
+  try{
+    const r=await fetch('/api/quick'); const d=await r.json();
+    cpuHist.push(d.cpu_pct); ramHist.push(d.ram_pct);
+    if(cpuHist.length>MAX_HIST) cpuHist.shift();
+    if(ramHist.length>MAX_HIST) ramHist.shift();
+    // Update chart + values only
+    const cpuEl=document.getElementById('cv-cpu-val');
+    const ramEl=document.getElementById('cv-ram-val');
+    if(cpuEl){cpuEl.textContent=d.cpu_pct+'%';cpuEl.style.color=pctColor(d.cpu_pct)}
+    if(ramEl){ramEl.textContent=d.ram_pct+'%';ramEl.style.color=pctColor(d.ram_pct)}
+    const ramSub=document.querySelector('#p-ov .chart-wrap:last-child .chart-sub');
+    drawChart(document.getElementById('cv-cpu'),cpuHist,'var(--green)',100);
+    drawChart(document.getElementById('cv-ram'),ramHist,'var(--red)',100);
+  }catch(e){}
+}
+
+async function fullRefresh(){
+  const btn=document.querySelector('.btn');
+  btn.textContent='수집 중...'; btn.style.opacity='.5';
+  await fetchFull();
+  btn.textContent='Full Refresh'; btn.style.opacity='1';
+}
+
+// ─── Actions: Confirm → Running → Done (single modal) ───
+let elapsedTimer=null;
+function setPhase(phase){
+  document.getElementById('c-phase-confirm').style.display=phase==='confirm'?'':'none';
+  document.getElementById('c-phase-running').style.display=phase==='running'?'':'none';
+  document.getElementById('c-phase-done').style.display=phase==='done'?'':'none';
+}
+function confirmAction(id, label, confirmMsg){
+  pendingAction=id;
+  document.getElementById('c-title').textContent=label;
+  // Show/hide sudo password field
+  const sudoWrap=document.getElementById('c-sudo-wrap');
+  const sudoPw=document.getElementById('c-sudo-pw');
+  sudoWrap.style.display=(id==='purge_cache')?'':'none';
+  sudoPw.value='';
+  if(!confirmMsg){
+    document.getElementById('confirm').classList.add('show');
+    setPhase('running');
+    execConfirmed();
+    return;
+  }
+  document.getElementById('c-body').textContent=confirmMsg;
+  document.getElementById('c-go').disabled=false;
+  setPhase('confirm');
+  document.getElementById('confirm').classList.add('show');
+  if(id==='purge_cache') setTimeout(()=>sudoPw.focus(),100);
+}
+function closeConfirm(){
+  document.getElementById('confirm').classList.remove('show');
+  pendingAction=null;
+  if(elapsedTimer){clearInterval(elapsedTimer);elapsedTimer=null}
+}
+async function execConfirmed(){
+  const id=pendingAction;
+  if(!id) return;
+  // Transition to running phase (stay in same modal)
+  document.getElementById('c-go').disabled=true;
+  setPhase('running');
+  document.getElementById('c-title').textContent='실행 중...';
+  // Elapsed timer
+  const startTime=Date.now();
+  document.getElementById('c-elapsed').textContent='0초';
+  elapsedTimer=setInterval(()=>{
+    const sec=Math.round((Date.now()-startTime)/1000);
+    document.getElementById('c-elapsed').textContent=sec+'초';
+  },500);
+  try{
+    const body={};
+    const sudoPw=document.getElementById('c-sudo-pw').value;
+    if(sudoPw) body.password=sudoPw;
+    const r=await fetch('/api/action/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const data=await r.json();
+    clearInterval(elapsedTimer);elapsedTimer=null;
+    // Transition to done phase
+    document.getElementById('c-title').textContent='실행 완료';
+    document.getElementById('c-log').textContent=data.logs.join('\n');
+    document.getElementById('c-dur').textContent=`실행: ${data.duration_ms}ms`;
+    document.getElementById('c-time').textContent=data.metrics.timestamp;
+    setPhase('done');
+    // Update data + re-render
+    D=data.metrics;
+    cpuHist.push(Math.round(D.cpu.user+D.cpu.sys));
+    ramHist.push(D.memory.pressure_pct);
+    renderOV(); renderMA();
+  }catch(e){
+    clearInterval(elapsedTimer);elapsedTimer=null;
+    document.getElementById('c-title').textContent='실행 실패';
+    document.getElementById('c-log').textContent=e.message;
+    setPhase('done');
+  }
+}
+
+// ─── Init ───
+setInterval(()=>{
+  const t=new Date().toLocaleTimeString('ko-KR',{hour:'2-digit',minute:'2-digit',second:'2-digit',timeZone:'Asia/Seoul'});
+  document.getElementById('clock').textContent=t+' KST';
+},1000);
+// Only allow close from the explicit close button — not ESC, not backdrop click
+// (confirm phase allows cancel button + ESC; running/done phases only allow button)
+function confirmPhaseActive(){return document.getElementById('c-phase-confirm').style.display!=='none'}
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&confirmPhaseActive())closeConfirm()});
+document.getElementById('confirm').addEventListener('click',e=>{if(e.target.id==='confirm'&&confirmPhaseActive())closeConfirm()});
+
+fetchFull().then(()=>{
+  pollTimer=setInterval(quickPoll, 5000);
+});
+</script>
+</body></html>
