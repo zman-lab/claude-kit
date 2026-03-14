@@ -52,14 +52,29 @@ tr:last-child td{border-bottom:none}
 .chart-val{position:absolute;top:8px;right:12px;font-size:28px;font-weight:800;font-variant-numeric:tabular-nums}
 .chart-sub{position:absolute;top:40px;right:12px;font-size:11px;color:var(--dim)}
 
-/* Treemap flex */
-.treemap{display:flex;gap:3px;height:110px;margin-bottom:16px}
-.tm{border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;justify-content:center;min-width:28px;transition:flex .4s;position:relative;overflow:visible}
+/* Treemap grid (v2 style) */
+.treemap{display:grid;grid-template-columns:repeat(36,1fr);grid-template-rows:repeat(4,52px);gap:3px;margin-bottom:20px}
+.tm{border-radius:6px;padding:6px 8px;display:flex;flex-direction:column;justify-content:center;position:relative;overflow:visible;cursor:default;transition:filter .15s}
+.tm:hover{filter:brightness(1.15)}
 .tm .n{font-size:10px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
-.tm .v{font-size:15px;font-weight:800;line-height:1.1;overflow:hidden}.tm .d{font-size:9px;opacity:.7;overflow:hidden}
+.tm .v{font-size:16px;font-weight:800;line-height:1.1;overflow:hidden}.tm .d{font-size:9px;opacity:.7;overflow:hidden}
 .tm .tip{display:none;position:absolute;bottom:calc(100% + 6px);left:50%;transform:translateX(-50%);background:#252836;border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-size:11px;white-space:nowrap;z-index:100;pointer-events:none;color:var(--text);box-shadow:0 4px 12px rgba(0,0,0,.4)}
 .tm .tip::after{content:'';position:absolute;top:100%;left:50%;transform:translateX(-50%);border:5px solid transparent;border-top-color:#252836}
 .tm:hover .tip{display:block}
+
+/* Insight highlight box */
+.insight-box{background:rgba(240,146,62,.08);border:1px solid rgba(240,146,62,.2);border-radius:8px;padding:12px 16px;margin:10px 0 18px;font-size:12px;color:var(--orange);line-height:1.6}
+.insight-box strong{color:var(--yellow)}
+
+/* Solution grid 2-col */
+.sol-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px}
+.sol-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden}
+.sol-card::before{content:'';position:absolute;top:0;left:0;width:3px;height:100%;border-radius:3px 0 0 3px}
+.sol-card.sev-critical::before{background:var(--red)}.sol-card.sev-warning::before{background:var(--orange)}
+.sol-card.sev-info::before{background:var(--blue)}.sol-card.sev-summary::before{background:var(--green)}
+.sol-card h3{font-size:13px;font-weight:700;margin-bottom:4px}
+.sol-card .desc{font-size:11px;color:var(--dim);line-height:1.5;white-space:pre-line}
+.sol-card .sol-acts{margin-top:8px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
 
 /* MCP grid */
 .mcp-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:8px}
@@ -105,7 +120,7 @@ tr:last-child td{border-bottom:none}
 .stat .l{font-size:10px;color:var(--dim)}.stat .v{font-size:14px;font-weight:600}
 
 #loading{text-align:center;padding:60px;color:var(--dim);font-size:13px}
-@media(max-width:800px){.g2,.g3,.g4{grid-template-columns:1fr}.treemap{flex-wrap:wrap;height:auto}}
+@media(max-width:800px){.g2,.g3,.g4,.sol-grid{grid-template-columns:1fr}.treemap{display:flex;flex-wrap:wrap;height:auto}}
 </style>
 </head><body>
 
@@ -281,33 +296,59 @@ function renderMA(){
     <strong style="color:var(--red)">MCP ${mcp.total_count}개</strong> = ${(mcp.total_mb/1024).toFixed(1)} GB &nbsp;·&nbsp; Claude ${cl.total_count}개 = ${(cl.total_mb/1024).toFixed(1)} GB
     <span style="float:right;color:var(--dim)">${cl.total_count} 세션 × MCP 7종 = ${mcp.total_count}개</span></div>`;
 
-  // Treemap
-  h+='<div class="section">메모리 지도</div>';
-  const tot=mem.total_gb;
+  // Treemap (v2 grid layout)
+  h+='<div class="section">메모리 전체 지도 ('+mem.total_gb+' GB) — 블록 크기 = 실제 비율</div>';
+  const tot=mem.total_gb, TC=36; // total grid columns
   const blocks=[
     {n:'MCP',v:mcp.total_mb/1024,c:'rgba(240,78,83,.2)',bc:'rgba(240,78,83,.35)',tc:'var(--red)',d:mcp.total_count+'개'},
     {n:'Claude',v:cl.total_mb/1024,c:'rgba(61,214,140,.15)',bc:'rgba(61,214,140,.3)',tc:'var(--green)',d:cl.total_count+'개'},
     {n:'Cache',v:mem.inactive_gb,c:'rgba(77,156,240,.1)',bc:'rgba(77,156,240,.2)',tc:'var(--blue)',d:'회수가능'},
-    {n:'Compressed',v:mem.compressed_gb,c:'rgba(240,146,62,.12)',bc:'rgba(240,146,62,.25)',tc:'var(--orange)',d:''},
     {n:'Wired',v:mem.wired_gb,c:'rgba(232,200,64,.12)',bc:'rgba(232,200,64,.25)',tc:'var(--yellow)',d:'커널'},
+    {n:'Compressed',v:mem.compressed_gb,c:'rgba(240,146,62,.12)',bc:'rgba(240,146,62,.25)',tc:'var(--orange)',d:'RAM 부족→압축'},
   ];
+  const extra=[];
+  const cs2={security:['rgba(155,109,240,.12)','rgba(155,109,240,.25)','var(--purple)','보안SW'],chrome:['rgba(61,200,208,.12)','rgba(61,200,208,.25)','var(--cyan)','Chrome'],docker:['rgba(77,156,240,.12)','rgba(77,156,240,.25)','var(--blue)','Docker']};
   ['security','chrome','docker'].forEach(k=>{
     if(!m.categories[k]) return;
-    const cs={security:['rgba(155,109,240,.12)','rgba(155,109,240,.25)','var(--purple)','보안SW'],chrome:['rgba(61,200,208,.12)','rgba(61,200,208,.25)','var(--cyan)','Chrome'],docker:['rgba(77,156,240,.12)','rgba(77,156,240,.25)','var(--blue)','Docker']};
-    const c=cs[k]; blocks.push({n:c[3],v:m.categories[k].total_mb/1024,c:c[0],bc:c[1],tc:c[2],d:''});
+    const c=cs2[k]; extra.push({n:c[3],v:m.categories[k].total_mb/1024,c:c[0],bc:c[1],tc:c[2],d:''});
   });
-  blocks.push({n:'Free',v:mem.free_gb,c:'rgba(61,214,140,.08)',bc:'rgba(61,214,140,.15)',tc:'var(--green)',d:''});
+  extra.push({n:'Free',v:mem.free_gb,c:'rgba(61,214,140,.08)',bc:'rgba(61,214,140,.15)',tc:'var(--green)',d:''});
 
+  // Calculate grid positions — big blocks span multiple rows, small blocks fill remaining space
   h+='<div class="treemap">';
-  blocks.forEach(b=>{
-    const flex=(b.v/tot*100).toFixed(1);
-    const sizeStr=b.v>=1?b.v.toFixed(1)+'GB':(b.v*1024).toFixed(0)+'MB';
-    const tipText=`${b.n}: ${sizeStr}${b.d?' — '+b.d:''}`;
-    h+=`<div class="tm" style="flex:${flex};background:${b.c};border:1px solid ${b.bc}">
-      <div class="tip">${tipText}</div>
-      <div class="n" style="color:${b.tc}">${b.n}</div><div class="v" style="color:${b.tc}">${b.v>=1?b.v.toFixed(1)+'G':(b.v*1024).toFixed(0)+'M'}</div><div class="d">${b.d}</div></div>`;
+  // Row 1-4: MCP (big, left), Claude (medium), then others fill right side
+  const mcpCols=Math.max(2,Math.round((blocks[0].v/tot)*TC));
+  const clCols=Math.max(2,Math.round((blocks[1].v/tot)*TC));
+  const cacheCols=Math.max(2,Math.round((blocks[2].v/tot)*TC));
+  const wiredCols=Math.max(1,Math.round((blocks[3].v/tot)*TC));
+  const compCols=Math.max(1,Math.round((blocks[4].v/tot)*TC));
+  const rightStart=mcpCols+clCols+1;
+  const midStart=rightStart+cacheCols;
+  let col=1;
+  // MCP: full height left
+  const mkTip=b=>{const s=b.v>=1?b.v.toFixed(1)+'GB':(b.v*1024).toFixed(0)+'MB';return `${b.n}: ${s}${b.d?' — '+b.d:''}`;};
+  const mkBlock=(b,gc,gr)=>`<div class="tm" title="${mkTip(b)}" style="grid-column:${gc};grid-row:${gr};background:${b.c};border:1px solid ${b.bc}"><div class="tip">${mkTip(b)}</div><div class="n" style="color:${b.tc}">${b.n}</div><div class="v" style="color:${b.tc}">${b.v>=1?b.v.toFixed(1)+'G':(b.v*1024).toFixed(0)+'M'}</div><div class="d">${b.d}</div></div>`;
+  h+=mkBlock(blocks[0],`1/${mcpCols+1}`,'1/5');          // MCP full height
+  h+=mkBlock(blocks[1],`${mcpCols+1}/${mcpCols+clCols+1}`,'1/5'); // Claude full height
+  h+=mkBlock(blocks[2],`${rightStart}/${rightStart+cacheCols}`,'1/3'); // Cache top-right
+  h+=mkBlock(blocks[3],`${rightStart}/${rightStart+wiredCols}`,'3/5'); // Wired bottom-left
+  h+=mkBlock(blocks[4],`${rightStart+wiredCols}/${rightStart+cacheCols}`,'3/5'); // Compressed bottom-right
+  // Extra blocks in remaining columns
+  let ec=rightStart+cacheCols;
+  extra.forEach((b,i)=>{
+    const w=Math.max(1,Math.round((b.v/tot)*TC));
+    const rows=i<extra.length/2?'1/3':'3/5';
+    if(ec+w<=TC+1){h+=mkBlock(b,`${ec}/${ec+w}`,rows);ec+=w;}
   });
   h+='</div>';
+
+  // Insight summary box (v2 style)
+  if(mcp.total_count>10){
+    const subMcp=(cl.sub_count*0.57).toFixed(1);
+    h+=`<div class="insight-box"><strong>핵심 인사이트:</strong> Claude ${cl.total_count}개 세션이 각각 MCP 서버를 독립 스폰 → <strong>${mcp.total_count}개 프로세스</strong>가 ${(mcp.total_mb/1024).toFixed(1)}GB 차지. Claude CLI(${(cl.total_mb/1024).toFixed(1)}GB)보다 <strong>MCP가 ${(mcp.total_mb/cl.total_mb).toFixed(1)}배</strong> 더 먹음.`;
+    if(cl.sub_count>3) h+=`<br>서브에이전트 ${cl.sub_count}개가 각각 MCP 풀셋 탑재. 서브에이전트 1개 = ~800MB.`;
+    h+=`</div>`;
+  }
 
   // MCP breakdown
   h+=`<div class="section">MCP 서버별 (${mcp.total_count}개, ${(mcp.total_mb/1024).toFixed(1)} GB)</div><div class="mcp-grid">`;
@@ -329,12 +370,13 @@ function renderMA(){
   });
   h+='</tbody></table>';
 
-  // Insights
-  h+='<div class="section">인사이트 + 해결</div>';
+  // Insights + Solutions (v2 2-column grid)
+  h+='<div class="section">해결방안 (효과순)</div>';
+  h+='<div class="sol-grid">';
   m.insights.forEach(ins=>{
-    h+=`<div class="ins ${ins.severity}"><h3>${ins.title}</h3><div class="desc">${ins.description}</div>`;
+    h+=`<div class="sol-card sev-${ins.severity}"><h3>${ins.title}</h3><div class="desc">${ins.description}</div>`;
     if(ins.actions?.length){
-      h+='<div class="acts">';
+      h+='<div class="sol-acts">';
       ins.actions.forEach(a=>{
         h+=`<button class="btn-act" onclick="confirmAction('${a.id}','${a.label}',\`${(a.confirm||'').replace(/`/g,"'")}\`)">
           ${a.label}</button><span class="act-effect">${a.effect}</span>`;
@@ -343,6 +385,7 @@ function renderMA(){
     }
     h+='</div>';
   });
+  h+='</div>';
 
   document.getElementById('p-ma').innerHTML=h;
 }
