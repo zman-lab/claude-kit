@@ -83,26 +83,20 @@ check_port() {
 
 # 4. 프로젝트 설치 + 기동
 install_board() {
-    mkdir -p "$INSTALL_DIR/data"
-    cd "$INSTALL_DIR" || { err "설치 경로 접근 실패: $INSTALL_DIR"; exit 1; }
+    # 레포 클론 (없으면)
+    if [ ! -d "$INSTALL_DIR/board" ]; then
+        log "레포 클론 중..."
+        git clone https://github.com/zman-lab/claude-kit.git "$INSTALL_DIR"
+    else
+        log "기존 설치 감지. 최신 코드로 업데이트..."
+        git -C "$INSTALL_DIR" pull --ff-only 2>/dev/null || true
+    fi
 
-    # docker-compose.yml 생성 (인라인)
-    cat > docker-compose.yml << 'COMPOSE'
-services:
-  board:
-    image: ghcr.io/zman-lab/claude-kit-board:latest
-    ports:
-      - "${BOARD_PORT:-8585}:8585"
-    volumes:
-      - ./data:/app/data
-    restart: always
-    environment:
-      - DATABASE_URL=sqlite:///data/board.db
-      - MCP_MODE=sse
-COMPOSE
+    mkdir -p "$INSTALL_DIR/board/data"
+    cd "$INSTALL_DIR/board" || { err "설치 경로 접근 실패: $INSTALL_DIR/board"; exit 1; }
 
-    BOARD_PORT=$BOARD_PORT docker compose pull
-    BOARD_PORT=$BOARD_PORT docker compose up -d
+    # 로컬 빌드 + 기동
+    BOARD_PORT=$BOARD_PORT docker compose up -d --build
 }
 
 # 5. 헬스체크
