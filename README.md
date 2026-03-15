@@ -28,7 +28,16 @@ cd claude-kit
 - **스킬**: Claude Code용 커스텀 명령어
 - **운영 가이드**: AI가 자동으로 서버 관리
 
+## 스킬 목록
+
+| 스킬 | 설명 | 설치 |
+|------|------|------|
+| [my-ppt](skills/my-ppt/) | 한글 발표자료 제작 (HTML→Playwright→PPTX) | `bash skills/my-ppt/setup.sh` |
+
+각 스킬 폴더에 README.md와 setup.sh가 포함되어 있어, AI가 자동으로 설치/트러블슈팅 가능.
+
 ## 요구사항
 
-- Docker (자동 설치됨)
+- Docker (자동 설치됨) — Claude Board용
 - Claude Code 또는 Claude Cowork
+- Node.js 18+ — 스킬별 추가 의존성은 각 스킬 README 참조
