@@ -45,8 +45,8 @@ exec sg docker -c "bash"
 ### Claude Code 인증 확인
 
 ```bash
-# 인증 파일 존재 여부
-ls ~/.claude/.claude.json 2>/dev/null && echo "인증 OK" || echo "인증 필요"
+# 인증 파일 확인 (둘 중 하나 있으면 OK)
+ls ~/.claude/.claude.json 2>/dev/null || ls ~/.claude/.credentials.json 2>/dev/null
 
 # 인증 안 되어 있으면:
 # 사용자에게 "터미널에 claude 라고 한 번만 치고 로그인해주세요" 안내
@@ -65,7 +65,7 @@ localhost:7999 (nginx)
     ├─ /law/api/      → Backend (FastAPI, Cython 컴파일)
     │                      ├─ Claude CLI (--print 모드, 호스트 인증 사용)
     │                      ├─ 법제처 API (법령/판례 검색)
-    │                      └─ PostgreSQL + Redis
+    │                      └─ SQLite + Redis
     └─ /              → /law/ 리다이렉트
 ```
 
@@ -76,6 +76,20 @@ localhost:7999 (nginx)
 ---
 
 ## 설치
+
+### 파일 다운로드
+
+Board FTP에서 전체 파일 다운로드:
+```
+http://192.168.219.111:8585/ftp → zman-lab/claude-kit/law-kit/
+```
+
+또는 curl로 개별 파일 다운로드:
+```bash
+curl -sf http://192.168.219.111:8585/api/files/download/zman-lab/claude-kit/law-kit/GUIDE.md
+curl -sf http://192.168.219.111:8585/api/files/download/zman-lab/claude-kit/law-kit/docker-compose.yml
+# 나머지 파일도 동일한 방식으로
+```
 
 ### 방법 1: setup.sh (권장)
 
@@ -122,7 +136,8 @@ curl -sf http://localhost:7999/law/ -o /dev/null && echo "OK" || echo "FAIL"
 | `CLAUDE_HOME` | Claude 인증 디렉토리 경로 | `~/.claude` | setup.sh가 자동 감지 |
 | `LAW_PORT` | 외부 접속 포트 | `7999` | 포트 충돌 시만 변경 |
 | `LAW_API_OC` | 법제처 API 인증키 | (사전 설정됨) | 변경 불필요 |
-| `ADMIN_PASSWORD` | 관리자 비밀번호 | `7895` | 원하면 변경 |
+| `SKIP_AUTH` | 비밀번호 없이 바로 접속 | `true` | false로 바꾸면 비밀번호 활성화 |
+| `ADMIN_PASSWORD` | 관리자 비밀번호 | `7895` | SKIP_AUTH=false일 때만 사용 |
 | `AI_PROVIDER` | AI 모드 | `cli` | 변경 불필요 |
 | `CLAUDE_MODEL` | 사용 AI 모델 | `claude-sonnet-4-20250514` | 변경 불필요 |
 
@@ -140,33 +155,25 @@ services:
   backend:
     image: law-backend:latest
     environment:
+      - DATABASE_URL=sqlite+aiosqlite:///data/law.db
+      - SKIP_AUTH=${SKIP_AUTH:-true}
       - CLAUDE_CONFIG_DIR=/root/.claude
-      - DATABASE_URL=postgresql+asyncpg://law:law@postgres:5432/law
-      - REDIS_URL=redis://redis:6379/0
       - AI_PROVIDER=cli
       - LAW_API_OC=${LAW_API_OC}
     volumes:
       - ${CLAUDE_HOME:-~/.claude}:/root/.claude:ro
+      - law-data:/app/data
 
   frontend:
     image: law-frontend:latest
     environment:
       - NEXT_PUBLIC_API_URL=
 
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      - POSTGRES_DB=law
-      - POSTGRES_USER=law
-      - POSTGRES_PASSWORD=law
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-
   redis:
     image: redis:7-alpine
 
 volumes:
-  pgdata:
+  law-data:
 ```
 
 ---
@@ -198,8 +205,9 @@ sudo service docker start
 # 1. 컨테이너 안에서 claude 동작 확인
 docker exec law-backend claude --version
 
-# 2. 인증 마운트 확인
-docker exec law-backend ls /root/.claude/.claude.json
+# 2. 인증 마운트 확인 (둘 중 하나)
+docker exec law-backend ls /root/.claude/.claude.json 2>/dev/null || \
+docker exec law-backend ls /root/.claude/.credentials.json 2>/dev/null
 
 # 3. 실제 AI 호출 테스트
 docker exec law-backend claude --print "안녕하세요" --output-format json
@@ -226,9 +234,27 @@ docker compose down && docker compose up -d
 ### DB 초기화 (데이터 리셋)
 
 ```bash
-docker compose down -v   # 볼륨 포함 삭제
-docker compose up -d     # 새 DB로 시작
-# 초기 관리자 비밀번호: 7895
+# SQLite 파일 삭제 후 재시작
+rm data/law.db 2>/dev/null; docker compose restart backend
+# 백엔드가 자동으로 새 DB 생성
+```
+
+### 로그인 폼이 뜸 (SKIP_AUTH인데)
+
+```bash
+# 브라우저 localStorage에 남은 인증 정보 제거
+# 브라우저 콘솔(F12)에서:
+localStorage.clear()
+# 이후 새로고침 (F5)
+```
+
+### 백엔드 TypeError (서버 에러)
+
+```bash
+# Cython + FastAPI 호환 이슈일 수 있음 → 이미지 업데이트 필요
+docker compose pull backend  # 최신 이미지 확인
+docker compose up -d --force-recreate backend
+# 또는 새 이미지 파일 받아서 docker load 재실행
 ```
 
 ### WSL2 특이사항
@@ -265,10 +291,12 @@ sleep 20 && curl -sf http://localhost:7999/law/ -o /dev/null && echo "OK"
 
 > **브라우저에서 http://localhost:7999/law/ 에 접속하시면 됩니다.**
 >
-> - 처음 접속하면 비밀번호 입력창이 뜹니다. 비밀번호: `7895`
+> - 비밀번호 없이 바로 접속됩니다 (SKIP_AUTH 기본 활성화)
 > - "계약서 초안" 탭에서 계약 유형을 선택하고 요청사항을 입력하면 AI가 작성합니다
 > - "계약서 검토" 탭에서 PDF/DOCX 파일을 업로드하면 AI가 분석합니다
 > - "채팅" 탭에서 법률 관련 질문을 하면 법무자문단이 답변합니다
+>
+> 만약 로그인 폼이 뜨면: 브라우저 콘솔(F12)에서 `localStorage.clear()` 입력 후 새로고침
 
 ---
 
@@ -287,11 +315,12 @@ docker compose up -d
 ## 백업/복원
 
 ```bash
-# 백업 (DB 데이터)
-docker exec law-postgres pg_dump -U law law > backup_$(date +%Y%m%d).sql
+# 백업 (SQLite DB 파일)
+docker cp law-backend:/app/data/law.db ./law-backup-$(date +%Y%m%d).db
 
 # 복원
-cat backup.sql | docker exec -i law-postgres psql -U law law
+docker cp law-backup.db law-backend:/app/data/law.db
+docker compose restart backend
 ```
 
 ---
