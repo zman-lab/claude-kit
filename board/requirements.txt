@@ -10,8 +10,8 @@ httpx>=0.27.0
 # MCP 서버
 mcp[cli]>=1.0.0
 
-# Claude CLI SDK
-claude-core @ git+https://github.com/zman-lab/claude-core.git@main
+# Claude CLI SDK (번들)
+claude-core @ file:///app/sdk
 
 # 테스트
 pytest>=8.0.0

@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "claude-core"
+version = "1.0.0.1"
+description = "Claude CLI daemon management & memory system SDK"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+
+dependencies = [
+    "aiosqlite>=0.19.0",
+    "pydantic>=2.0.0",
+]
+
+[project.optional-dependencies]
+vector = [
+    "sqlite-vec>=0.1.0",
+    "sentence-transformers>=2.2.0",
+]
+dev = [
+    "pytest>=7.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0",
+]
+
+[tool.setuptools.packages.find]
+include = ["claude_core*"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
