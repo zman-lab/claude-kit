@@ -86,6 +86,7 @@ export default function Sidebar({ open, onClose }) {
           </div>
           {navLink('/recent', 'Recent Posts')}
           {navLink('/boards', 'All Boards')}
+          {navLink('/chat', 'Chat', <span className="text-base leading-none">💬</span>)}
         </nav>
 
         {/* Footer */}

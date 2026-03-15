@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from app.database import get_db, init_db, DB_PATH
 from app.seed import seed_data
 from app import crud
+from app.chat import router as chat_router
 from app.schemas import (
     BoardCreate, PostCreate, PostUpdate, ReplyCreate, ReplyUpdate, LikeCreate,
     VerifyRequest, PasswordCreate, PasswordAction,
@@ -46,6 +47,9 @@ async def lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Claude Board", lifespan=lifespan)
+
+# 채팅 라우터
+app.include_router(chat_router)
 
 # React SPA 빌드 결과물 서빙
 FRONTEND_DIR = Path(__file__).parent.parent / "frontend" / "dist"

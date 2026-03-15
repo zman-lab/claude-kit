@@ -117,6 +117,32 @@ class AccessPassword(Base):
     password_plain = Column(String(100), nullable=True)  # 평문 (관리자 확인용)
 
 
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    title = Column(String(200), nullable=True)
+    cli_session_hash = Column(String(100), nullable=True)
+    is_active = Column(Boolean, default=True)
+    is_resumable = Column(Boolean, default=False)
+    skill_command = Column(String(200), nullable=True)
+    created_at = Column(DateTime, default=_utcnow)
+    updated_at = Column(DateTime, default=_utcnow, onupdate=_utcnow)
+
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan")
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    session_id = Column(Integer, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(20), nullable=False)  # "user", "assistant"
+    content = Column(Text, nullable=False)
+    is_complete = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=_utcnow)
+
+    session = relationship("ChatSession", back_populates="messages")
+
+
 class TokenUsage(Base):
     __tablename__ = "token_usage"
     __table_args__ = (

@@ -8,6 +8,7 @@ import Post from './pages/Post.jsx'
 import NewPost from './pages/NewPost.jsx'
 import RecentAll from './pages/RecentAll.jsx'
 import Admin from './pages/Admin.jsx'
+import Chat from './pages/Chat.jsx'
 import SetupWizard from './pages/SetupWizard.jsx'
 import { getSetupStatus } from './utils/api.js'
 
@@ -42,6 +43,7 @@ export default function App() {
         <Route path="/posts/:id" element={<Post />} />
         <Route path="/recent" element={<RecentAll />} />
         <Route path="/admin" element={<Admin />} />
+        <Route path="/chat" element={<Chat />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

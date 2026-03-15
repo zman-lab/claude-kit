@@ -62,6 +62,16 @@
 .dark .tag-done { background: #064e3b; color: #6ee7b7; }
 .dark .tag-knowhow { background: #4c1d95; color: #c4b5fd; }
 
+/* ===== Chat ===== */
+@keyframes blurReveal {
+  from { filter: blur(4px); opacity: 0.7; }
+  to { filter: blur(0px); opacity: 1; }
+}
+.blur-typing {
+  display: inline;
+  animation: blurReveal 0.3s ease-out forwards;
+}
+
 /* ===== Custom Theme ===== */
 .custom { background-color: var(--custom-bg, #f8fafc); }
 .custom .min-h-screen { background-color: var(--custom-bg, #f8fafc); }

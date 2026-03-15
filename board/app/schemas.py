@@ -192,6 +192,47 @@ class AttachmentOut(BaseModel):
         from_attributes = True
 
 
+# -- Chat --
+
+class ChatSessionCreate(BaseModel):
+    skill_command: str | None = None
+
+
+class ChatSessionUpdate(BaseModel):
+    title: str | None = None
+
+
+class ChatSessionOut(BaseModel):
+    id: int
+    title: str | None
+    cli_session_hash: str | None
+    is_active: bool
+    is_resumable: bool
+    skill_command: str | None
+    created_at: datetime
+    updated_at: datetime | None
+    message_count: int = 0
+
+    class Config:
+        from_attributes = True
+
+
+class ChatMessageOut(BaseModel):
+    id: int
+    session_id: int
+    role: str
+    content: str
+    is_complete: bool
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class ChatMessageCreate(BaseModel):
+    content: str
+
+
 # -- Setup --
 
 class SetupInit(BaseModel):
