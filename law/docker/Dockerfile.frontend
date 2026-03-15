@@ -1,0 +1,63 @@
+# =============================================================================
+# Stage 1: deps — 의존성 설치
+# =============================================================================
+FROM node:20-alpine AS deps
+
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+COPY frontend/package.json frontend/package-lock.json* ./
+RUN npm ci
+
+
+# =============================================================================
+# Stage 2: builder — Next.js 빌드
+# =============================================================================
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+# deps에서 node_modules 가져오기
+COPY --from=deps /app/node_modules ./node_modules
+
+# 소스 복사
+COPY frontend/ .
+
+# 환경변수 (빌드 시점)
+# NEXT_PUBLIC_API_URL="" → nginx가 /law/api/ 프록시 처리
+# AirLock/Board 프록시는 제거됨 (Docker 배포 환경)
+ENV NEXT_PUBLIC_API_URL=""
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# standalone 빌드 (next.config.js: output: 'standalone')
+RUN npm run build
+
+
+# =============================================================================
+# Stage 3: runner — 최소 실행 이미지
+# =============================================================================
+FROM node:20-alpine AS runner
+
+RUN apk add --no-cache libc6-compat
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
+# NEXT_PUBLIC_API_URL: 런타임에 docker-compose가 주입 (빈값 = nginx 프록시)
+ENV NEXT_PUBLIC_API_URL=""
+
+# standalone 실행에 필요한 파일만 복사
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+# public 폴더 (있는 경우)
+COPY --from=builder /app/public ./public
+
+EXPOSE 3000
+
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+
+# Next.js standalone 서버
+CMD ["node", "server.js"]

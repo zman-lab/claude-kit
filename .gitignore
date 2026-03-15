@@ -33,3 +33,6 @@ backups/
 
 # Build
 # board/frontend/dist/ 는 포함 (Docker에서 사용)
+
+# Law Kit Docker 이미지 (대용량)
+law/images/

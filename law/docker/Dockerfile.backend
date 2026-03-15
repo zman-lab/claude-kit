@@ -1,0 +1,113 @@
+# =============================================================================
+# Stage 1: builder — Cython 컴파일 (.py → .so)
+# =============================================================================
+FROM python:3.12-slim AS builder
+
+# 컴파일 도구 설치
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    gcc \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /build
+
+# requirements 복사 (의존성 먼저 설치 — 레이어 캐시 활용)
+COPY backend/requirements.txt .
+
+# claude-core wheel 복사 (private repo — GitHub clone 대신 로컬 빌드 wheel 사용)
+COPY backend/dist/claude_core-*.whl /tmp/
+
+# claude-core 줄 제거 후 나머지 의존성 설치
+RUN sed '/-e.*claude-core/d; /git+.*claude-core/d' requirements.txt > requirements_docker.txt
+
+# Python 의존성 설치 (Cython 포함)
+RUN pip install --no-cache-dir cython setuptools wheel && \
+    pip install --no-cache-dir /tmp/claude_core-*.whl && \
+    pip install --no-cache-dir -r requirements_docker.txt && \
+    rm -f /tmp/claude_core-*.whl
+
+# 앱 소스 복사
+COPY backend/app ./app
+
+# Cython 컴파일 스크립트 복사 (heredoc stdin 대신 파일 방식 — DOCKER_BUILDKIT=0 호환)
+COPY docker/cython_compile.py /tmp/cython_compile.py
+
+# Cython 컴파일 실행 (__init__.py 제외, .py → .so)
+RUN python3 /tmp/cython_compile.py && rm -f /tmp/cython_compile.py
+
+# .py 파일 잔존 검증 (QEMU skip 허용 — WARNING만 출력, exit 1 없음)
+RUN echo "=== .py 파일 잔존 검증 ===" && \
+    leftover=$(find app -name '*.py' -not -name '__init__.py') && \
+    if [ -n "$leftover" ]; then \
+        echo "WARNING: 일부 .py 파일 잔존 (QEMU 컴파일 실패):"; \
+        echo "$leftover"; \
+    else \
+        echo "PASS: 모든 .py → .so 컴파일 완료"; \
+    fi && \
+    so_count=$(find app -name '*.so' | wc -l) && \
+    echo "생성된 .so: ${so_count}개"
+
+
+# =============================================================================
+# Stage 2: runtime — 실행 이미지
+# =============================================================================
+FROM python:3.12-slim
+
+# 시스템 패키지
+# - tesseract: OCR (이미지 PDF 텍스트 추출)
+# - poppler-utils: pdf2image (PDF → 이미지 변환)
+# - fonts-nanum: 한글 폰트 (PDF 생성)
+# - curl: 헬스체크 + 법제처 API 디버깅
+# - nodejs, npm: Claude Code CLI 설치용
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    tesseract-ocr \
+    tesseract-ocr-kor \
+    poppler-utils \
+    fonts-nanum \
+    curl \
+    git \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Claude Code 설치 (npm global)
+# claude 바이너리: /usr/local/bin/claude
+RUN npm install -g @anthropic-ai/claude-code && \
+    which claude && claude --version
+
+WORKDIR /app
+
+# Python 의존성 (builder와 동일 — 런타임 패키지)
+COPY backend/requirements.txt .
+
+# claude-core wheel 복사 (private repo — GitHub clone 대신 로컬 빌드 wheel 사용)
+COPY backend/dist/claude_core-*.whl /tmp/
+
+RUN sed '/-e.*claude-core/d; /git+.*claude-core/d' requirements.txt > requirements_docker.txt && \
+    pip install --no-cache-dir /tmp/claude_core-*.whl && \
+    pip install --no-cache-dir -r requirements_docker.txt && \
+    rm -f requirements.txt requirements_docker.txt /tmp/claude_core-*.whl
+
+# builder에서 컴파일된 .so + __init__.py만 복사 (.py 소스 없음)
+COPY --from=builder /build/app ./app
+
+# 런타임에 .py 파일 잔존 검증 (QEMU skip 허용 — WARNING만 출력, exit 1 없음)
+RUN leftover=$(find app -name '*.py' -not -name '__init__.py') && \
+    if [ -n "$leftover" ]; then \
+        echo "WARNING: 런타임 이미지에 일부 .py 잔존 (QEMU 컴파일 실패):"; \
+        echo "$leftover"; \
+    else \
+        echo "OK: 소스 .py 없음 (Cython .so만 존재)"; \
+    fi
+
+# 업로드/로그 디렉토리
+RUN mkdir -p /app/uploads /app/logs
+
+EXPOSE 8000
+
+# 헬스체크
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -sf http://localhost:8000/health || exit 1
+
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
