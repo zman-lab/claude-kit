@@ -12,25 +12,17 @@ services:
     image: law-backend:latest
     environment:
       - CLAUDE_CONFIG_DIR=/root/.claude
-      - DATABASE_URL=postgresql+asyncpg://law:law@postgres:5432/law
-      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite+aiosqlite:///data/law.db
       - AI_PROVIDER=cli
       - CLAUDE_MODEL=${CLAUDE_MODEL:-claude-sonnet-4-20250514}
       - CLAUDE_CLI_PATH=/usr/local/bin/claude
       - LAW_API_OC=${LAW_API_OC}
-      - LAW_API_BASE_URL=https://www.law.go.kr/DRF
       - ROOT_PATH=/law
-      - CORS_ORIGINS=["http://localhost:${LAW_PORT:-7999}"]
+      - SKIP_AUTH=${SKIP_AUTH:-true}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-7895}
     volumes:
       - "${CLAUDE_HOME:-~/.claude}:/root/.claude:ro"
-      - law-uploads:/app/uploads
-      - law-logs:/app/logs
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
+      - law-data:/app/data
     restart: always
 
   frontend:
@@ -39,26 +31,9 @@ services:
       - NEXT_PUBLIC_API_URL=
     restart: always
 
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      - POSTGRES_DB=law
-      - POSTGRES_USER=law
-      - POSTGRES_PASSWORD=law
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U law"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-    restart: always
-
   redis:
     image: redis:7-alpine
     restart: always
 
 volumes:
-  pgdata:
-  law-uploads:
-  law-logs:
+  law-data:

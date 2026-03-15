@@ -74,7 +74,7 @@ check_claude_auth() {
         claude_home="$HOME/.claude"
     fi
 
-    if [ -z "$claude_home" ] || [ ! -f "$claude_home/.claude.json" ]; then
+    if [ -z "$claude_home" ] || { [ ! -f "$claude_home/.claude.json" ] && [ ! -f "$claude_home/.credentials.json" ]; }; then
         warn "Claude Code 인증 정보를 찾을 수 없습니다."
         echo ""
         echo "  터미널에서 'claude' 를 실행하고 로그인해주세요."
