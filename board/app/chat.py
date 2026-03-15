@@ -1,4 +1,6 @@
 """채팅 세션/메시지 관리 API."""
+import json
+import os
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
@@ -7,6 +9,7 @@ from sqlalchemy import func as sa_func
 
 from . import models, schemas
 from .database import get_db
+from .chat_daemon import is_sdk_available, get_chat_binder, get_chat_daemon
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -33,6 +36,18 @@ def _get_msg_count(db: Session, session_id: int) -> int:
     return db.query(sa_func.count(models.ChatMessage.id)).filter(
         models.ChatMessage.session_id == session_id
     ).scalar() or 0
+
+
+def _save_assistant_msg(db: Session, session_id: int, content: str, is_complete: bool = True):
+    """assistant 메시지 DB 저장 헬퍼."""
+    msg = models.ChatMessage(
+        session_id=session_id,
+        role="assistant",
+        content=content,
+        is_complete=is_complete,
+    )
+    db.add(msg)
+    db.commit()
 
 
 # --- 세션 CRUD ---
@@ -89,19 +104,25 @@ def update_session(session_id: int, req: schemas.ChatSessionUpdate, db: Session 
 
 
 @router.delete("/sessions/{session_id}")
-def delete_session(session_id: int, db: Session = Depends(get_db)):
+async def delete_session(session_id: int, db: Session = Depends(get_db)):
     session = db.query(models.ChatSession).filter(
         models.ChatSession.id == session_id
     ).first()
     if not session:
         raise HTTPException(404, "세션을 찾을 수 없습니다")
+
+    # SDK unbind (프로세스 종료)
+    if is_sdk_available():
+        binder = get_chat_binder()
+        await binder.unbind(str(session_id))
+
     db.delete(session)
     db.commit()
     return {"ok": True, "deleted_session_id": session_id}
 
 
 @router.post("/sessions/{session_id}/archive")
-def archive_session(session_id: int, db: Session = Depends(get_db)):
+async def archive_session(session_id: int, db: Session = Depends(get_db)):
     """세션을 히스토리로 보관 (is_active=False)."""
     session = db.query(models.ChatSession).filter(
         models.ChatSession.id == session_id
@@ -109,7 +130,6 @@ def archive_session(session_id: int, db: Session = Depends(get_db)):
     if not session:
         raise HTTPException(404, "세션을 찾을 수 없습니다")
     session.is_active = False
-    session.is_resumable = False
     session.updated_at = _utcnow()
 
     # AI 제목 자동 생성 (첫 사용자 메시지 기반)
@@ -123,8 +143,47 @@ def archive_session(session_id: int, db: Session = Depends(get_db)):
             if len(first_msg.content) > 50:
                 session.title += "..."
 
+    # SDK unbind → session_hash 보관
+    if is_sdk_available():
+        binder = get_chat_binder()
+        session_hash = await binder.unbind(str(session_id))
+        if session_hash:
+            session.cli_session_hash = session_hash
+
     db.commit()
     return {"ok": True}
+
+
+@router.post("/sessions/{session_id}/resume", response_model=schemas.ChatSessionOut)
+async def resume_session(session_id: int, db: Session = Depends(get_db)):
+    """마지막 세션 이어하기. is_resumable=True인 세션만 가능."""
+    session = db.query(models.ChatSession).filter(
+        models.ChatSession.id == session_id,
+    ).first()
+    if not session:
+        raise HTTPException(404, "세션을 찾을 수 없습니다")
+    if not session.is_resumable:
+        raise HTTPException(403, "이 세션은 이어하기가 불가능합니다")
+    if not session.cli_session_hash:
+        raise HTTPException(400, "세션 해시가 없어 이어가기 불가능합니다")
+
+    # 세션을 다시 active로
+    session.is_active = True
+    session.updated_at = _utcnow()
+    db.commit()
+
+    msg_count = db.query(sa_func.count(models.ChatMessage.id)).filter(
+        models.ChatMessage.session_id == session_id
+    ).scalar()
+
+    return schemas.ChatSessionOut(
+        id=session.id, title=session.title,
+        cli_session_hash=session.cli_session_hash,
+        is_active=session.is_active, is_resumable=session.is_resumable,
+        skill_command=session.skill_command,
+        created_at=session.created_at, updated_at=session.updated_at,
+        message_count=msg_count or 0,
+    )
 
 
 # --- 메시지 ---
@@ -154,11 +213,7 @@ async def send_message(
     req: schemas.ChatMessageCreate,
     db: Session = Depends(get_db),
 ):
-    """메시지 전송. SSE로 응답 스트리밍.
-
-    Note: 실제 CLI 연동은 claude-core SDK 통합 시 구현.
-    현재는 메시지 저장 + 더미 SSE 응답.
-    """
+    """메시지 전송. SSE로 응답 스트리밍."""
     session = db.query(models.ChatSession).filter(
         models.ChatSession.id == session_id
     ).first()
@@ -178,24 +233,82 @@ async def send_message(
     session.updated_at = _utcnow()
     db.commit()
 
+    # session 상태를 로컬 변수로 캡처 (클로저에서 사용)
+    cli_session_hash = session.cli_session_hash
+    is_resumable = session.is_resumable
+
     async def stream_response():
-        """SSE 스트리밍. CLI 통합 전까지는 placeholder."""
-        import json
-        # TODO: claude-core ChatBinder + ClaudeDaemon.ask_stream_chat() 연동
-        placeholder = f"[Chat SDK 연동 대기 중] 수신: {req.content[:50]}"
+        if not is_sdk_available():
+            # SDK 미설치 시 placeholder
+            placeholder = f"[SDK 미설치] 수신: {req.content[:50]}"
+            yield f"data: {json.dumps({'type': 'text', 'content': placeholder})}\n\n"
+            yield f"data: {json.dumps({'type': 'done', 'session_id': str(session_id)})}\n\n"
+            _save_assistant_msg(db, session_id, placeholder)
+            return
 
-        yield f"data: {json.dumps({'type': 'text', 'content': placeholder})}\n\n"
-        yield f"data: {json.dumps({'type': 'done', 'session_id': str(session_id)})}\n\n"
+        binder = get_chat_binder()
+        daemon = get_chat_daemon()
 
-        # assistant 메시지 저장
-        assistant_msg = models.ChatMessage(
-            session_id=session_id,
-            role="assistant",
-            content=placeholder,
-            is_complete=True,
-        )
-        db.add(assistant_msg)
-        db.commit()
+        # 프로세스 확보 (바인딩 안 되어 있으면 바인딩)
+        process = await binder.get(str(session_id))
+        if process is None:
+            try:
+                if cli_session_hash and is_resumable:
+                    process = await binder.resume(str(session_id), cli_session_hash)
+                else:
+                    process = await binder.bind(str(session_id))
+                    # 초기 명령 실행 (설정된 경우)
+                    initial_cmd = os.getenv("CHAT_INITIAL_COMMAND")
+                    if initial_cmd:
+                        await daemon.run_initial_command(process, initial_cmd)
+            except Exception as e:
+                error_msg = f"CLI 연결 실패: {str(e)}"
+                yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
+                _save_assistant_msg(db, session_id, f"⚠️ {error_msg}", is_complete=True)
+                return
+
+        # 스트리밍 응답
+        full_text = ""
+        try:
+            async for event_json in daemon.ask_stream_chat(process, req.content):
+                event = json.loads(event_json)
+                event_type = event.get("type", "")
+
+                if event_type == "text":
+                    text = event.get("content", "")
+                    full_text += text
+                    yield f"data: {json.dumps({'type': 'text', 'content': text})}\n\n"
+
+                elif event_type == "tool_status":
+                    yield f"data: {json.dumps(event)}\n\n"
+
+                elif event_type == "done":
+                    final_text = event.get("full_text", full_text)
+                    new_sid = event.get("session_id")
+                    if new_sid:
+                        # CLI session hash 업데이트
+                        db.query(models.ChatSession).filter(
+                            models.ChatSession.id == session_id
+                        ).update({"cli_session_hash": new_sid})
+                        db.commit()
+                    yield f"data: {json.dumps({'type': 'done', 'session_id': str(session_id)})}\n\n"
+                    _save_assistant_msg(db, session_id, final_text or full_text)
+                    return
+
+                elif event_type == "error":
+                    error_msg = event.get("message", "알 수 없는 오류")
+                    yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
+                    _save_assistant_msg(db, session_id, f"⚠️ {error_msg}")
+                    return
+
+                elif event_type == "keepalive":
+                    yield f"data: {json.dumps({'type': 'keepalive'})}\n\n"
+
+        except Exception as e:
+            error_msg = f"스트리밍 오류: {str(e)}"
+            yield f"data: {json.dumps({'type': 'error', 'message': error_msg})}\n\n"
+            if full_text:
+                _save_assistant_msg(db, session_id, full_text, is_complete=False)
 
     return StreamingResponse(
         stream_response(),
@@ -208,20 +321,28 @@ async def send_message(
 
 
 @router.post("/sessions/{session_id}/compact")
-def compact_session(session_id: int, db: Session = Depends(get_db)):
-    """대화 요약 트리거. TODO: CLI 연동."""
+async def compact_session(session_id: int, db: Session = Depends(get_db)):
+    """대화 요약 트리거."""
     session = db.query(models.ChatSession).filter(
         models.ChatSession.id == session_id,
         models.ChatSession.is_active == True,
     ).first()
     if not session:
         raise HTTPException(404, "세션을 찾을 수 없습니다")
-    # TODO: ClaudeDaemon.send_compact() 호출
-    return {"ok": True, "message": "compact 요청됨 (CLI 연동 대기 중)"}
+
+    if is_sdk_available():
+        binder = get_chat_binder()
+        daemon = get_chat_daemon()
+        process = await binder.get(str(session_id))
+        if process:
+            success = await daemon.send_compact(process)
+            return {"ok": success, "message": "compact 완료" if success else "compact 실패"}
+
+    return {"ok": True, "message": "compact 요청됨 (SDK 미설치)"}
 
 
 @router.post("/sessions/{session_id}/clear")
-def clear_session(session_id: int, db: Session = Depends(get_db)):
+async def clear_session(session_id: int, db: Session = Depends(get_db)):
     """대화 초기화. 메시지 삭제 + CLI clear."""
     session = db.query(models.ChatSession).filter(
         models.ChatSession.id == session_id,
@@ -229,9 +350,18 @@ def clear_session(session_id: int, db: Session = Depends(get_db)):
     ).first()
     if not session:
         raise HTTPException(404, "세션을 찾을 수 없습니다")
+
+    # 메시지 삭제
     db.query(models.ChatMessage).filter(
         models.ChatMessage.session_id == session_id
     ).delete()
     db.commit()
-    # TODO: ClaudeDaemon.send_clear_explicit() 호출
+
+    if is_sdk_available():
+        daemon = get_chat_daemon()
+        binder = get_chat_binder()
+        process = await binder.get(str(session_id))
+        if process:
+            await daemon.send_clear_explicit(process)
+
     return {"ok": True, "message": "대화 초기화됨"}

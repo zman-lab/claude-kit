@@ -14,6 +14,7 @@ from app.database import get_db, init_db, DB_PATH
 from app.seed import seed_data
 from app import crud
 from app.chat import router as chat_router
+from app.chat_daemon import init_chat_sdk, shutdown_chat_sdk
 from app.schemas import (
     BoardCreate, PostCreate, PostUpdate, ReplyCreate, ReplyUpdate, LikeCreate,
     VerifyRequest, PasswordCreate, PasswordAction,
@@ -43,7 +44,11 @@ async def lifespan(_app: FastAPI):
             (PENDING / f).unlink()
         except OSError:
             pass
+    # Chat SDK 초기화
+    await init_chat_sdk()
     yield
+    # Chat SDK 종료
+    await shutdown_chat_sdk()
 
 
 app = FastAPI(title="Claude Board", lifespan=lifespan)
