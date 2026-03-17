@@ -79,6 +79,25 @@ def _make_handler(
                 search = qs.get("search", [None])[0]
                 from .collectors.base import _get_docker_logs
                 self._json_response(_get_docker_logs(container, tail, level, search))
+            elif path == "/api/claude-config":
+                from .collectors.base import _scan_claude_config
+                self._json_response(_scan_claude_config())
+            elif path == "/api/claude-file":
+                qs = parse_qs(urlparse(self.path).query)
+                fpath = qs.get("path", [""])[0]
+                if fpath:
+                    from .collectors.base import _read_claude_file
+                    self._json_response(_read_claude_file(fpath))
+                else:
+                    self.send_error(400)
+            elif path == "/api/claude-deps":
+                qs = parse_qs(urlparse(self.path).query)
+                fpath = qs.get("path", [""])[0]
+                if fpath:
+                    from .collectors.base import _analyze_dependencies
+                    self._json_response(_analyze_dependencies(fpath))
+                else:
+                    self.send_error(400)
             elif path == "/docker-log":
                 qs = parse_qs(urlparse(self.path).query)
                 name = qs.get("name", [""])[0]

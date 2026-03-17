@@ -530,6 +530,284 @@ fetchLogs();if(document.getElementById('auto-refresh').checked)startAR();
 </script></body></html>'''
 
 
+# ── Claude Config Scanner ──
+
+_SCAN_PROJECTS: list[tuple[str, str]] = [
+    ("board", "/Users/nhn/zman-lab/board"),
+    ("law", "/Users/nhn/zman-lab/law"),
+    ("lawear", "/Users/nhn/zman-lab/lawear"),
+    ("claude-kit", "/Users/nhn/zman-lab/claude-kit"),
+    ("claude-core", "/Users/nhn/zman-lab/claude-core"),
+    ("claude-utils", "/Users/nhn/zman-lab/claude-utils"),
+    ("sdk", "/Users/nhn/zman-lab/sdk"),
+    ("init", "/Users/nhn/zman-lab/init"),
+    ("dev-airlock", "/Users/nhn/dev-airlock"),
+    ("hps", "/Users/nhn/work/hangame-poker-server"),
+    ("gia", "/Users/nhn/work/gia"),
+    ("betting_base", "/Users/nhn/work/betting_base"),
+    ("ideaworks", "/Users/nhn/work/ideaworks"),
+    ("elkhound", "/Users/nhn/work/ideaworks/product/elkhound"),
+]
+
+_CLAUDE_HOMES: list[str] = [
+    os.path.expanduser("~/.claude"),
+    os.path.expanduser("~/.claude-2nd"),
+]
+
+
+def _scan_claude_config() -> dict[str, Any]:
+    """Claude Code 관련 파일 전체 스캔 (on-demand, NOT in poll)."""
+    import glob
+
+    files: list[dict[str, Any]] = []
+    worktrees: list[dict[str, Any]] = []
+
+    def _finfo(path: str, category: str, project: str = "", desc: str = "") -> dict[str, Any] | None:
+        try:
+            st = os.stat(path)
+            return {
+                "path": path,
+                "name": os.path.basename(path),
+                "category": category,
+                "project": project,
+                "desc": desc,
+                "size": st.st_size,
+                "created": time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_birthtime if hasattr(st, 'st_birthtime') else st.st_ctime)),
+                "modified": time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime)),
+                "is_dir": os.path.isdir(path),
+            }
+        except (OSError, AttributeError):
+            return None
+
+    # 1. Global Claude homes
+    for home in _CLAUDE_HOMES:
+        if not os.path.isdir(home):
+            continue
+        profile = os.path.basename(home)
+
+        # CLAUDE.md
+        cm = os.path.join(home, "CLAUDE.md")
+        if os.path.isfile(cm):
+            f = _finfo(cm, "claude_md", profile, f"글로벌 CLAUDE.md ({profile})")
+            if f: files.append(f)
+
+        # settings
+        for sf in ["settings.json", "settings.local.json"]:
+            sp = os.path.join(home, sf)
+            if os.path.isfile(sp):
+                f = _finfo(sp, "settings", profile, f"{sf} ({profile})")
+                if f: files.append(f)
+
+        # Global commands (skills)
+        cmd_dir = os.path.join(home, "commands")
+        if os.path.isdir(cmd_dir):
+            for fn in sorted(os.listdir(cmd_dir)):
+                fp = os.path.join(cmd_dir, fn)
+                if os.path.isfile(fp) and fn.endswith(".md"):
+                    f = _finfo(fp, "skill", profile, f"글로벌 스킬: {fn[:-3]}")
+                    if f: files.append(f)
+
+        # Projects memory dirs
+        proj_dir = os.path.join(home, "projects")
+        if os.path.isdir(proj_dir):
+            for pname in sorted(os.listdir(proj_dir)):
+                pp = os.path.join(proj_dir, pname)
+                if not os.path.isdir(pp):
+                    continue
+                mem_dir = os.path.join(pp, "memory")
+                if os.path.isdir(mem_dir):
+                    mm = os.path.join(mem_dir, "MEMORY.md")
+                    if os.path.isfile(mm):
+                        f = _finfo(mm, "memory_index", profile, f"메모리 인덱스: {pname}")
+                        if f: files.append(f)
+                    for mf in sorted(os.listdir(mem_dir)):
+                        mfp = os.path.join(mem_dir, mf)
+                        if os.path.isfile(mfp) and mf != "MEMORY.md" and mf.endswith(".md"):
+                            f = _finfo(mfp, "memory", profile, f"메모리: {mf[:-3]}")
+                            if f: files.append(f)
+
+    # 2. init global skills
+    init_cmd = os.path.expanduser("~/init/claude/commands")
+    if os.path.isdir(init_cmd):
+        for fn in sorted(os.listdir(init_cmd)):
+            fp = os.path.join(init_cmd, fn)
+            if os.path.isfile(fp) and fn.endswith(".md"):
+                f = _finfo(fp, "skill", "init", f"글로벌 스킬 (init): {fn[:-3]}")
+                if f: files.append(f)
+
+    # 3. Per-project files
+    for proj_name, proj_path in _SCAN_PROJECTS:
+        if not os.path.isdir(proj_path):
+            continue
+
+        # CLAUDE.md at root
+        cm = os.path.join(proj_path, "CLAUDE.md")
+        if os.path.isfile(cm):
+            f = _finfo(cm, "claude_md", proj_name, f"프로젝트 CLAUDE.md")
+            if f: files.append(f)
+
+        # .claude/ directory
+        dot_claude = os.path.join(proj_path, ".claude")
+        if os.path.isdir(dot_claude):
+            # .claude/settings.local.json
+            for sf in ["settings.json", "settings.local.json"]:
+                sp = os.path.join(dot_claude, sf)
+                if os.path.isfile(sp):
+                    f = _finfo(sp, "settings", proj_name, f"{sf}")
+                    if f: files.append(f)
+
+            # .claude/commands/ (project skills)
+            pcmd = os.path.join(dot_claude, "commands")
+            if os.path.isdir(pcmd):
+                for fn in sorted(os.listdir(pcmd)):
+                    fp = os.path.join(pcmd, fn)
+                    if os.path.isfile(fp) and fn.endswith(".md"):
+                        f = _finfo(fp, "skill", proj_name, f"프로젝트 스킬: {fn[:-3]}")
+                        if f: files.append(f)
+
+    # 4. Worktrees
+    seen_git_roots: set[str] = set()
+    for proj_name, proj_path in _SCAN_PROJECTS:
+        git_root = proj_path
+        # elkhound -> ideaworks
+        if proj_name == "elkhound":
+            git_root = "/Users/nhn/work/ideaworks"
+        if git_root in seen_git_roots or not os.path.isdir(git_root):
+            continue
+        seen_git_roots.add(git_root)
+
+        wt_out = _run(f"git -C {git_root} worktree list --porcelain 2>/dev/null")
+        current_wt: dict[str, str] = {}
+        for line in wt_out.split("\n"):
+            if line.startswith("worktree "):
+                if current_wt and current_wt.get("path") != git_root:
+                    branch = current_wt.get("branch", "").replace("refs/heads/", "")
+                    wt_path = current_wt.get("path", "")
+                    # Get last commit info
+                    commit_info = _run(f"git -C {git_root} log -1 --format='%h %s (%cr)' {branch} 2>/dev/null")
+                    worktrees.append({
+                        "project": proj_name,
+                        "git_root": git_root,
+                        "path": wt_path,
+                        "branch": branch,
+                        "commit": commit_info,
+                        "bare": current_wt.get("bare") == "true",
+                    })
+                current_wt = {"path": line[9:]}
+            elif line.startswith("branch "):
+                current_wt["branch"] = line[7:]
+            elif line == "bare":
+                current_wt["bare"] = "true"
+        # Last entry
+        if current_wt and current_wt.get("path") != git_root:
+            branch = current_wt.get("branch", "").replace("refs/heads/", "")
+            wt_path = current_wt.get("path", "")
+            commit_info = _run(f"git -C {git_root} log -1 --format='%h %s (%cr)' {branch} 2>/dev/null")
+            worktrees.append({
+                "project": proj_name,
+                "git_root": git_root,
+                "path": wt_path,
+                "branch": branch,
+                "commit": commit_info,
+            })
+
+    # Stats
+    cats: dict[str, int] = {}
+    for f in files:
+        cats[f["category"]] = cats.get(f["category"], 0) + 1
+
+    return {
+        "files": files,
+        "worktrees": worktrees,
+        "stats": cats,
+        "total_files": len(files),
+        "total_worktrees": len(worktrees),
+        "scan_time": time.strftime("%H:%M:%S KST"),
+    }
+
+
+def _read_claude_file(path: str) -> dict[str, Any]:
+    """Claude 관련 파일 내용 읽기 (보안: 허용 경로만)."""
+    path = os.path.realpath(path)
+    home = os.path.expanduser("~")
+    allowed_prefixes = [
+        os.path.join(home, ".claude"),
+        os.path.join(home, "zman-lab"),
+        os.path.join(home, "work"),
+        os.path.join(home, "dev-airlock"),
+        os.path.join(home, "init"),
+    ]
+    if not any(path.startswith(p) for p in allowed_prefixes):
+        return {"error": "접근 불가 경로", "path": path}
+    if not os.path.isfile(path):
+        return {"error": "파일 없음", "path": path}
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            content = f.read(500_000)  # 500KB limit
+        return {"path": path, "content": content, "size": len(content)}
+    except Exception as e:
+        return {"error": str(e), "path": path}
+
+
+def _analyze_dependencies(path: str) -> dict[str, Any]:
+    """Claude 파일의 의존성 분석."""
+    content = ""
+    try:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            content = f.read(200_000)
+    except Exception:
+        return {"nodes": [], "edges": [], "error": "파일 읽기 실패"}
+
+    basename = os.path.basename(path)
+    nodes: list[dict[str, str]] = [{"id": path, "label": basename, "type": "root"}]
+    edges: list[dict[str, str]] = []
+    seen: set[str] = {path}
+
+    # 1. Skill references: /skill-name patterns
+    import re as _re
+    skill_refs = set(_re.findall(r'`/([a-zA-Z][\w-]*)`', content))
+    skill_refs.update(_re.findall(r'(?:skill|Skill)\s*(?:=\s*|:\s*|tool.*?skill.*?)["\']([a-zA-Z][\w-]*)["\']', content))
+    for sk in skill_refs:
+        sk_id = f"skill:{sk}"
+        if sk_id not in seen:
+            nodes.append({"id": sk_id, "label": f"/{sk}", "type": "skill"})
+            seen.add(sk_id)
+        edges.append({"from": path, "to": sk_id, "label": "uses"})
+
+    # 2. Memory file references: [filename.md](filename.md)
+    mem_refs = set(_re.findall(r'\[.*?\]\(([a-zA-Z_][\w_-]*\.md)\)', content))
+    for mf in mem_refs:
+        mf_id = f"memory:{mf}"
+        if mf_id not in seen:
+            nodes.append({"id": mf_id, "label": mf, "type": "memory"})
+            seen.add(mf_id)
+        edges.append({"from": path, "to": mf_id, "label": "refs"})
+
+    # 3. File/path references
+    path_refs = set(_re.findall(r'`((?:/Users/nhn|~/)[^`\s]{5,})`', content))
+    for pr in list(path_refs)[:20]:  # limit
+        pr_expanded = pr.replace("~", os.path.expanduser("~"))
+        if os.path.exists(pr_expanded) and pr_expanded != path:
+            pr_id = f"file:{pr}"
+            if pr_id not in seen:
+                nodes.append({"id": pr_id, "label": os.path.basename(pr), "type": "file"})
+                seen.add(pr_id)
+            edges.append({"from": path, "to": pr_id, "label": "path"})
+
+    # 4. For skills: check if they chain-load other skills
+    if "/commands/" in path:
+        chain_refs = set(_re.findall(r'Skill\s*\(\s*skill\s*=\s*["\']([^"\']+)["\']', content))
+        chain_refs.update(_re.findall(r'`/([a-zA-Z][\w-]*)`\s*—', content))
+        for cr in chain_refs:
+            cr_id = f"skill:{cr}"
+            if cr_id not in seen:
+                nodes.append({"id": cr_id, "label": f"/{cr}", "type": "skill"})
+                seen.add(cr_id)
+            edges.append({"from": path, "to": cr_id, "label": "chain"})
+
+    return {"nodes": nodes, "edges": edges, "root": path}
+
+
 def _categorize_common(
     procs: list[dict[str, Any]], mcp_pids: list[str]
 ) -> dict[str, dict[str, Any]]:

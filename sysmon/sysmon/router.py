@@ -88,6 +88,33 @@ def create_router(prefix: str = "/sysmon", token: Optional[str] = None) -> Any:
         result["metrics"] = collector.collect_all()
         return JSONResponse(result)
 
+    @router.get("/api/claude-config")
+    async def claude_config(request: Request) -> JSONResponse:
+        if not _check_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        from .collectors.base import _scan_claude_config
+        return JSONResponse(_scan_claude_config())
+
+    @router.get("/api/claude-file")
+    async def claude_file(request: Request) -> JSONResponse:
+        if not _check_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        fpath = request.query_params.get("path", "")
+        if not fpath:
+            return JSONResponse({"error": "path required"}, status_code=400)
+        from .collectors.base import _read_claude_file
+        return JSONResponse(_read_claude_file(fpath))
+
+    @router.get("/api/claude-deps")
+    async def claude_deps(request: Request) -> JSONResponse:
+        if not _check_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        fpath = request.query_params.get("path", "")
+        if not fpath:
+            return JSONResponse({"error": "path required"}, status_code=400)
+        from .collectors.base import _analyze_dependencies
+        return JSONResponse(_analyze_dependencies(fpath))
+
     @router.get("/api/docker-logs/{container}")
     async def docker_logs(container: str, request: Request) -> JSONResponse:
         if not _check_token(request):
