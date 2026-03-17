@@ -168,10 +168,12 @@ tr:last-child td{border-bottom:none}
 
 /* Claude Config */
 .cc-tree{max-height:65vh;overflow-y:auto}
-.cc-file{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:13px;transition:.1s}
-.cc-file:hover{background:rgba(77,156,240,.1)}
-.cc-file .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
-.cc-file .fmeta{color:var(--dim);font-size:11px;white-space:nowrap}
+.cc-file{padding:6px 10px;border-radius:6px;cursor:pointer;font-size:13px;transition:.1s}
+.cc-file:hover{background:rgba(77,156,240,.08)}
+.cc-row1{display:flex;align-items:center;gap:6px}
+.cc-row1 .fname{font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:280px}
+.cc-row2{display:flex;align-items:center;gap:8px;margin-top:2px;padding-left:20px}
+.cc-path{font-size:10px;color:var(--dim);opacity:.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:500px}
 .cc-group{margin-bottom:16px}
 .cc-group-hdr{font-size:12px;font-weight:600;letter-spacing:.03em;color:var(--dim);padding:8px 10px;display:flex;justify-content:space-between;cursor:pointer;border-bottom:1px solid var(--border)}
 .cc-group-hdr:hover{color:var(--text)}
@@ -820,16 +822,22 @@ function renderCC(){
       if(citems.length>1) h+=`<div class="cc-subhdr">${catIcons[cat]||''} ${catNames[cat]||cat} (${citems.length})</div>`;
       citems.forEach(f=>{
         const hasDeps=cat==='claude_md'||cat==='skill'||cat==='memory_index';
-        const refsIn=f.refs_in||0, refsOut=f.refs_out||0;
-        h+=`<div class="cc-file" onclick="viewCCPopup('${f.path.replace(/'/g,"\\'")}','${f.name.replace(/'/g,"\\'")}')">
-          <span class="cc-icon">${catIcons[cat]||'📄'}</span>
-          <span class="fname" title="${f.path}">${f.project?'['+f.project+'] ':''}${f.name}</span>`;
-        if(refsIn) h+=`<span class="cc-refs in" title="다른 파일에서 ${refsIn}번 참조됨">in:${refsIn}</span>`;
-        if(refsOut) h+=`<span class="cc-refs out" title="내부에서 ${refsOut}개 스킬 호출">out:${refsOut}</span>`;
-        if(hasDeps) h+=`<button class="btn-deps" onclick="event.stopPropagation();showDeps('${f.path.replace(/'/g,"\\'")}')">deps</button>`;
-        h+=`<span class="cc-dates" title="생성: ${f.created}&#10;수정: ${f.modified}">📅${f.created} ✏️${f.modified}</span>`;
-        h+=`</div>`;
+        const ri=f.refs_in||0, ro=f.refs_out||0;
+        const esc=s=>s.replace(/'/g,"\\'");
+        h+=`<div class="cc-file" onclick="viewCCPopup('${esc(f.path)}','${esc(f.name)}')">
+          <div class="cc-row1">
+            <span class="cc-icon">${catIcons[cat]||'📄'}</span>
+            <span class="fname">${f.project?'['+f.project+'] ':''}${f.name}</span>`;
+        if(ri) h+=`<span class="cc-refs in">in:${ri}</span>`;
+        if(ro) h+=`<span class="cc-refs out">out:${ro}</span>`;
+        if(hasDeps) h+=`<button class="btn-deps" onclick="event.stopPropagation();showDeps('${esc(f.path)}')">deps</button>`;
+        h+=`</div>
+          <div class="cc-row2">
+            <span class="cc-dates">📅 ${f.created}  ✏️ ${f.modified}</span>
+            <span class="cc-path">${f.path}</span>
+          </div>`;
         if(f.parent) h+=`<div class="cc-inherit">↑ 상속: ${f.parent.split('/').slice(-2).join('/')}</div>`;
+        h+=`</div>`;
       });
     }
     h+=`</div>`;
