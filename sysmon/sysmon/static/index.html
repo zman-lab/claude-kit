@@ -168,15 +168,15 @@ tr:last-child td{border-bottom:none}
 
 /* Claude Config */
 .cc-tree{max-height:65vh;overflow-y:auto}
-.cc-file{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;cursor:pointer;font-size:11px;transition:.1s}
+.cc-file{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:13px;transition:.1s}
 .cc-file:hover{background:rgba(77,156,240,.1)}
-.cc-file .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.cc-file .fmeta{color:var(--dim);font-size:10px;white-space:nowrap}
-.cc-group{margin-bottom:14px}
-.cc-group-hdr{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);padding:6px 8px;display:flex;justify-content:space-between;cursor:pointer;border-bottom:1px solid var(--border)}
+.cc-file .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.cc-file .fmeta{color:var(--dim);font-size:11px;white-space:nowrap}
+.cc-group{margin-bottom:16px}
+.cc-group-hdr{font-size:12px;font-weight:600;letter-spacing:.03em;color:var(--dim);padding:8px 10px;display:flex;justify-content:space-between;cursor:pointer;border-bottom:1px solid var(--border)}
 .cc-group-hdr:hover{color:var(--text)}
-.cc-icon{font-size:12px;margin-right:2px}
-.cc-team{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600;margin-left:4px}
+.cc-icon{font-size:14px;margin-right:3px}
+.cc-team{display:inline-block;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:600;margin-left:4px}
 .cc-team.t-global{background:rgba(155,109,240,.15);color:var(--purple)}
 .cc-team.t-board{background:rgba(77,156,240,.15);color:var(--blue)}
 .cc-team.t-airlock{background:rgba(155,109,240,.15);color:var(--purple)}
@@ -185,18 +185,24 @@ tr:last-child td{border-bottom:none}
 .cc-team.t-lawear{background:rgba(61,200,208,.15);color:var(--cyan)}
 .cc-team.t-hps{background:rgba(240,96,144,.15);color:var(--pink)}
 .cc-team.t-infra{background:rgba(61,214,140,.15);color:var(--green)}
-.cc-refs{font-size:9px;padding:1px 4px;border-radius:3px;margin-left:3px}
+.cc-refs{font-size:10px;padding:2px 6px;border-radius:4px;margin-left:3px;font-weight:600}
 .cc-refs.in{background:rgba(61,214,140,.12);color:var(--green)}
 .cc-refs.out{background:rgba(77,156,240,.12);color:var(--blue)}
-.cc-inherit{font-size:9px;color:var(--dim);margin-left:12px;padding:2px 0}
-.cc-dates{font-size:9px;color:var(--dim)}
-.wt-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:6px;font-size:12px}
-.wt-card .wt-name{font-weight:700;color:var(--green)}
-.wt-card .wt-meta{color:var(--dim);font-size:11px;margin-top:2px}
-.btn-scan{padding:6px 16px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer;background:rgba(77,156,240,.15);color:var(--blue);border:1px solid rgba(77,156,240,.3)}
+.cc-inherit{font-size:11px;color:var(--dim);margin-left:16px;padding:2px 0}
+.cc-dates{font-size:11px;color:var(--dim)}
+.cc-subhdr{font-size:12px;color:var(--dim);padding:5px 10px;font-weight:500}
+.wt-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:8px;font-size:13px}
+.wt-card .wt-name{font-weight:700;font-size:13px;color:var(--green)}
+.wt-card .wt-meta{color:var(--dim);font-size:12px;margin-top:3px}
+.btn-scan{padding:7px 18px;border-radius:6px;font-size:12px;font-weight:600;border:none;cursor:pointer;background:rgba(77,156,240,.15);color:var(--blue);border:1px solid rgba(77,156,240,.3)}
 .btn-scan:hover{background:rgba(77,156,240,.25)}
-.btn-deps{padding:2px 8px;border-radius:4px;font-size:10px;border:1px solid rgba(155,109,240,.3);background:rgba(155,109,240,.1);color:var(--purple);cursor:pointer}
+.btn-deps{padding:3px 10px;border-radius:4px;font-size:11px;border:1px solid rgba(155,109,240,.3);background:rgba(155,109,240,.1);color:var(--purple);cursor:pointer;font-weight:600}
 .btn-deps:hover{background:rgba(155,109,240,.2)}
+.cc-filters{display:flex;gap:4px;flex-wrap:wrap;margin-bottom:14px}
+.cc-ftag{padding:4px 12px;border-radius:6px;font-size:11px;font-weight:600;border:1px solid var(--border);background:var(--card);color:var(--dim);cursor:pointer;transition:.15s;user-select:none}
+.cc-ftag:hover{color:var(--text);border-color:var(--blue)}
+.cc-ftag.on{color:var(--text);background:rgba(77,156,240,.15);border-color:var(--blue)}
+.cc-fdiv{width:1px;height:20px;background:var(--border);margin:0 4px;align-self:center}
 /* Dep graph modal */
 .dep-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:2000;backdrop-filter:blur(3px)}
 .dep-modal.show{display:flex}
@@ -287,7 +293,7 @@ tr:last-child td{border-bottom:none}
 
 <script>
 let D=null, cpuHist=[], ramHist=[], MAX_HIST=60, pollTimer=null, pendingAction=null, fetching=false;
-let ccData=null;
+let ccData=null, ccFilter={type:'',value:''};
 
 const TABS=['ov','ma','cs','dk','cc'];
 function tab(id){
@@ -735,63 +741,88 @@ async function scanClaudeConfig(){
   if(btn){btn.textContent='Scan';btn.style.opacity='1'}
 }
 
+function ccSetFilter(type,value){
+  if(ccFilter.type===type&&ccFilter.value===value){ccFilter={type:'',value:''};}
+  else{ccFilter={type,value};}
+  renderCC();
+}
+
 function renderCC(){
   if(!ccData){
     document.getElementById('p-cc').innerHTML=`<div style="text-align:center;padding:40px">
-      <div style="color:var(--dim);margin-bottom:12px">Claude 설정 파일을 스캔합니다</div>
+      <div style="color:var(--dim);margin-bottom:12px;font-size:14px">Claude 설정 파일을 스캔합니다</div>
       <button class="btn-scan" onclick="scanClaudeConfig()">Scan</button></div>`;
     return;
   }
-  const d=ccData;
+  const d=ccData, ft=ccFilter.type, fv=ccFilter.value;
   let h='';
 
-  h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <span style="font-size:12px;color:var(--dim)">파일 ${d.total_files}개 · 워크트리 ${d.total_worktrees}개 · 스캔: ${d.scan_time}</span>
+  h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+    <span style="font-size:13px;color:var(--dim)">파일 ${d.total_files}개 · 워크트리 ${d.total_worktrees}개 · 스캔: ${d.scan_time}</span>
     <button class="btn-scan" onclick="scanClaudeConfig()">Re-scan</button>
   </div>`;
 
-  // Stats
-  const st=d.stats||{};
-  h+=`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">`;
-  const catL={claude_md:['CLAUDE.md','var(--blue)'],skill:['Skills','var(--green)'],memory_index:['Memory Index','var(--orange)'],memory:['Memory','var(--yellow)'],settings:['Settings','var(--purple)']};
-  for(const[k,v]of Object.entries(catL)){
-    const cnt=st[k]||0;
-    if(cnt) h+=`<div class="card" style="padding:8px 14px;margin:0;min-width:80px"><div style="font-size:18px;font-weight:800;color:${v[1]}">${cnt}</div><div style="font-size:10px;color:var(--dim)">${v[0]}</div></div>`;
-  }
+  // Filter tags
+  const profiles=[...new Set(d.files.map(f=>f.project).filter(Boolean))];
+  const teams=Object.keys(d.teams||{}).sort();
+  const cats=['claude_md','skill','memory_index','memory','settings'];
+  const catLabel={claude_md:'CLAUDE.md',skill:'Skills',memory_index:'Memory Index',memory:'Memory',settings:'Settings'};
+
+  h+=`<div class="cc-filters">`;
+  h+=`<div class="cc-ftag ${!ft?'on':''}" onclick="ccSetFilter('','')">All (${d.total_files})</div>`;
+  h+=`<div class="cc-fdiv"></div>`;
+  cats.forEach(c=>{
+    const cnt=(d.stats||{})[c]||0;
+    if(cnt) h+=`<div class="cc-ftag ${ft==='cat'&&fv===c?'on':''}" onclick="ccSetFilter('cat','${c}')">${catLabel[c]} (${cnt})</div>`;
+  });
+  h+=`<div class="cc-fdiv"></div>`;
+  teams.forEach(t=>{
+    const cnt=(d.teams||{})[t]||0;
+    const teamEmoji={global:'🌍',board:'📋',airlock:'🔐',elkhound:'🐕',law:'⚖️',lawear:'⚖️',hps:'🎮',infra:'🛠️'};
+    if(cnt) h+=`<div class="cc-ftag ${ft==='team'&&fv===t?'on':''}" onclick="ccSetFilter('team','${t}')">${teamEmoji[t]||'📁'} ${t} (${cnt})</div>`;
+  });
   h+=`</div>`;
 
-  // Group by team with hierarchy: global first, then teams
+  // Apply filter
+  let filtered=d.files;
+  if(ft==='cat') filtered=filtered.filter(f=>f.category===fv);
+  else if(ft==='team') filtered=filtered.filter(f=>f.team===fv);
+  else if(ft==='profile') filtered=filtered.filter(f=>f.project===fv);
+
+  // Group filtered files by team
   const teamOrder=['global','board','airlock','elkhound','law','lawear','hps','infra'];
-  const teamLabel={global:'🌍 Global',board:'📋 Board',airlock:'🔐 Airlock',elkhound:'🐕 Elkhound',law:'⚖️ Law',lawear:'⚖️ Lawear',hps:'🎮 HPS',infra:'🛠️ Infra'};
+  const teamLabel2={global:'🌍 Global',board:'📋 Board',airlock:'🔐 Airlock',elkhound:'🐕 Elkhound',law:'⚖️ Law',lawear:'⚖️ Lawear',hps:'🎮 HPS',infra:'🛠️ Infra'};
   const byTeam={};
-  d.files.forEach(f=>{
+  filtered.forEach(f=>{
     const t=f.team||'global';
-    if(!byTeam[t]) byTeam[t]={claude_md:[],skill:[],memory_index:[],memory:[],settings:[]};
-    if(byTeam[t][f.category]) byTeam[t][f.category].push(f);
+    if(!byTeam[t]) byTeam[t]=[];
+    byTeam[t].push(f);
   });
 
   h+=`<div class="cc-tree">`;
   const orderedTeams=teamOrder.filter(t=>byTeam[t]);
   Object.keys(byTeam).forEach(t=>{if(!orderedTeams.includes(t))orderedTeams.push(t)});
 
-  orderedTeams.forEach(team=>{
-    const tdata=byTeam[team];
-    if(!tdata) return;
-    const total=Object.values(tdata).reduce((a,b)=>a+b.length,0);
-    if(!total) return;
-    const lbl=teamLabel[team]||('📁 '+team);
-    h+=`<div class="cc-group"><div class="cc-group-hdr"><span>${lbl} (${total})</span>${team!=='global'?'<span style="font-size:9px">← Global 상속</span>':''}</div>`;
+  const catIcons={claude_md:'📄',skill:'⚡',memory_index:'🗂️',memory:'📝',settings:'⚙️'};
 
-    const catIcons={claude_md:'📄',skill:'⚡',memory_index:'🗂️',memory:'📝',settings:'⚙️'};
+  orderedTeams.forEach(team=>{
+    const items=byTeam[team];
+    if(!items||!items.length) return;
+    const lbl=teamLabel2[team]||('📁 '+team);
+    h+=`<div class="cc-group"><div class="cc-group-hdr"><span>${lbl} (${items.length})</span>${team!=='global'?'<span style="font-size:10px">← Global 상속</span>':''}</div>`;
+
+    // Sub-group by category
+    const byCat={};
+    items.forEach(f=>{if(!byCat[f.category])byCat[f.category]=[];byCat[f.category].push(f)});
     const catNames={claude_md:'CLAUDE.md',skill:'Skills',memory_index:'Memory Index',memory:'Memory',settings:'Settings'};
-    for(const[cat,items]of Object.entries(tdata)){
-      if(!items.length) continue;
-      if(items.length>1) h+=`<div style="font-size:10px;color:var(--dim);padding:4px 8px">${catIcons[cat]} ${catNames[cat]} (${items.length})</div>`;
-      items.forEach(f=>{
+
+    for(const[cat,citems]of Object.entries(byCat)){
+      if(citems.length>1) h+=`<div class="cc-subhdr">${catIcons[cat]||''} ${catNames[cat]||cat} (${citems.length})</div>`;
+      citems.forEach(f=>{
         const hasDeps=cat==='claude_md'||cat==='skill'||cat==='memory_index';
         const refsIn=f.refs_in||0, refsOut=f.refs_out||0;
         h+=`<div class="cc-file" onclick="viewCCPopup('${f.path.replace(/'/g,"\\'")}','${f.name.replace(/'/g,"\\'")}')">
-          <span class="cc-icon">${catIcons[cat]}</span>
+          <span class="cc-icon">${catIcons[cat]||'📄'}</span>
           <span class="fname" title="${f.path}">${f.project?'['+f.project+'] ':''}${f.name}</span>`;
         if(refsIn) h+=`<span class="cc-refs in" title="다른 파일에서 ${refsIn}번 참조됨">in:${refsIn}</span>`;
         if(refsOut) h+=`<span class="cc-refs out" title="내부에서 ${refsOut}개 스킬 호출">out:${refsOut}</span>`;
@@ -804,20 +835,25 @@ function renderCC(){
     h+=`</div>`;
   });
 
-  // Worktrees
-  if(d.worktrees.length){
-    h+=`<div class="cc-group"><div class="cc-group-hdr"><span>🌿 Worktrees (${d.worktrees.length})</span></div>`;
-    d.worktrees.forEach(w=>{
-      const tc=w.team||'global';
-      h+=`<div class="wt-card">
-        <div class="wt-name">${w.branch||'(detached)'} <span class="cc-team t-${tc}">${tc}</span></div>
-        <div class="wt-meta">[${w.project}] ${w.path}</div>
-        ${w.commit?`<div class="wt-meta">${w.commit}</div>`:''}
-      </div>`;
-    });
-    h+=`</div>`;
+  // Worktrees (only if no filter or team filter matches)
+  const showWt=!ft||(ft==='team');
+  if(showWt&&d.worktrees.length){
+    const wtFiltered=ft==='team'?d.worktrees.filter(w=>(w.team||'global')===fv):d.worktrees;
+    if(wtFiltered.length){
+      h+=`<div class="cc-group"><div class="cc-group-hdr"><span>🌿 Worktrees (${wtFiltered.length})</span></div>`;
+      wtFiltered.forEach(w=>{
+        const tc=w.team||'global';
+        h+=`<div class="wt-card">
+          <div class="wt-name">${w.branch||'(detached)'} <span class="cc-team t-${tc}">${tc}</span></div>
+          <div class="wt-meta">[${w.project}] ${w.path}</div>
+          ${w.commit?`<div class="wt-meta">${w.commit}</div>`:''}
+        </div>`;
+      });
+      h+=`</div>`;
+    }
   }
 
+  if(!filtered.length) h+=`<div style="text-align:center;padding:30px;color:var(--dim);font-size:13px">필터 결과 없음</div>`;
   h+=`</div>`;
   document.getElementById('p-cc').innerHTML=h;
 }
