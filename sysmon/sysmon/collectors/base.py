@@ -48,6 +48,10 @@ class BaseCollector(ABC):
         """Claude CLI 세션 분석."""
         return _analyze_claude_common(procs)
 
+    def analyze_claude_detailed(self, procs: list[dict[str, Any]]) -> dict[str, Any]:
+        """Claude 세션 상세 분석 — 트리 구조 + 좀비 감지."""
+        return _analyze_claude_detailed(procs)
+
     def categorize_processes(
         self, procs: list[dict[str, Any]], mcp_pids: list[str]
     ) -> dict[str, Any]:
@@ -67,6 +71,7 @@ class BaseCollector(ABC):
         procs = self.collect_processes()
         mcp = self.analyze_mcp(procs)
         claude = self.analyze_claude(procs)
+        claude_sessions = self.analyze_claude_detailed(procs)
         docker = self.collect_docker()
         cats = self.categorize_processes(procs, mcp["pids"])
 
@@ -77,6 +82,7 @@ class BaseCollector(ABC):
             "disk": disk,
             "mcp": mcp,
             "claude": claude,
+            "claude_sessions": claude_sessions,
             "docker": docker,
             "categories": cats,
             "collect_ms": round((time.time() - start) * 1000),
@@ -88,6 +94,7 @@ class BaseCollector(ABC):
 
 # ── 공통 헬퍼 (Darwin/Linux 모두 동일한 로직) ──
 
+import os
 import re
 import subprocess
 import time
@@ -201,6 +208,145 @@ def _analyze_claude_common(procs: list[dict[str, Any]]) -> dict[str, Any]:
         "total_count": len(sessions),
         "total_mb": sum(s["rss_mb"] for s in sessions),
         "sessions": sorted(sessions, key=lambda x: -x["rss_mb"]),
+    }
+
+
+# 팀/프로젝트 매핑 패턴
+_TEAM_PATTERNS: list[tuple[str, list[str]]] = [
+    ("board", ["zman-lab/board"]),
+    ("airlock", ["dev-airlock"]),
+    ("elkhound", ["elkhound"]),
+    ("law", ["my-law"]),
+    ("lawear", ["lawear"]),
+    ("claude-kit", ["claude-kit"]),
+    ("sdk", ["zman-lab/sdk"]),
+]
+
+
+def _detect_team(cwd: str) -> str:
+    """작업 디렉토리 → 팀/프로젝트명."""
+    if not cwd:
+        return "unknown"
+    for team, patterns in _TEAM_PATTERNS:
+        if any(p in cwd for p in patterns):
+            return team
+    return os.path.basename(cwd) or "unknown"
+
+
+def _analyze_claude_detailed(procs: list[dict[str, Any]]) -> dict[str, Any]:
+    """Claude 세션 상세 분석 — 메인/서브 트리, 좀비 감지, 팀·모델·시작시간."""
+    claude_procs = []
+    for p in procs:
+        if "claude" not in p["cmd"].lower():
+            continue
+        if any(x in p["cmd"] for x in ["grep", "sysmon", "python"]):
+            continue
+        is_sub = "stream-json" in p["cmd"] and "dangerously-skip" in p["cmd"]
+        is_main = not is_sub and (
+            "claude" in p["cmd"].split()[0]
+            or ".local/bin/claude" in p["cmd"]
+        )
+        if not (is_sub or is_main):
+            continue
+        claude_procs.append({**p, "_is_sub": is_sub})
+
+    if not claude_procs:
+        return {
+            "trees": [], "zombies": [],
+            "main_count": 0, "sub_count": 0, "zombie_count": 0,
+            "total_count": 0, "total_mb": 0,
+        }
+
+    pids = [p["pid"] for p in claude_procs]
+    pid_csv = ",".join(pids)
+
+    # Batch: lstart + %cpu
+    ps_extra: dict[str, dict[str, Any]] = {}
+    for line in _run(f"ps -p {pid_csv} -o pid=,lstart=,%cpu=").split("\n"):
+        parts = line.split()
+        if len(parts) >= 7:
+            ps_extra[parts[0]] = {
+                "start_time": " ".join(parts[1:6]),
+                "cpu_pct": float(parts[6]),
+            }
+
+    # Batch: cwd via lsof
+    cwd_map: dict[str, str] = {}
+    cur_pid = None
+    for line in _run(
+        f"lsof -p {pid_csv} -a -d cwd -F pn 2>/dev/null"
+    ).split("\n"):
+        if line.startswith("p"):
+            cur_pid = line[1:]
+        elif line.startswith("n") and cur_pid:
+            cwd_map[cur_pid] = line[1:]
+
+    # Build session list
+    sessions: list[dict[str, Any]] = []
+    for p in claude_procs:
+        pid = p["pid"]
+        extra = ps_extra.get(pid, {})
+        cwd = cwd_map.get(pid, "")
+
+        model = ""
+        m = re.search(r"--model\s+(\S+)", p["cmd"])
+        if m:
+            model = re.sub(r"claude-(\w+)-(\d+)-\d+", r"\1-\2", m.group(1))
+
+        max_turns = 0
+        m = re.search(r"--max-turns\s+(\d+)", p["cmd"])
+        if m:
+            max_turns = int(m.group(1))
+
+        cpu_pct = extra.get("cpu_pct", 0.0)
+        sessions.append({
+            "pid": pid,
+            "ppid": p["ppid"],
+            "type": "sub" if p["_is_sub"] else "main",
+            "model": model,
+            "max_turns": max_turns,
+            "cwd": cwd,
+            "team": _detect_team(cwd),
+            "start_time": extra.get("start_time", ""),
+            "cpu_pct": round(cpu_pct, 1),
+            "rss_mb": p["rss_mb"],
+            "status": "active" if cpu_pct > 1.0 else "idle",
+        })
+
+    # Tree: main → sub-agents (via ppid)
+    main_pids = {s["pid"] for s in sessions if s["type"] == "main"}
+    trees: list[dict[str, Any]] = []
+    assigned: set[str] = set()
+
+    for s in sessions:
+        if s["type"] != "main":
+            continue
+        subs = [
+            sub for sub in sessions
+            if sub["type"] == "sub" and sub["ppid"] == s["pid"]
+        ]
+        assigned.update(sub["pid"] for sub in subs)
+        sub_mb = sum(sub["rss_mb"] for sub in subs)
+        trees.append({
+            **s,
+            "sub_agents": sorted(subs, key=lambda x: -x["rss_mb"]),
+            "sub_count": len(subs),
+            "total_mb": s["rss_mb"] + sub_mb,
+        })
+
+    zombies = [
+        s for s in sessions
+        if s["type"] == "sub" and s["pid"] not in assigned
+    ]
+
+    return {
+        "trees": sorted(trees, key=lambda x: -x["total_mb"]),
+        "zombies": sorted(zombies, key=lambda x: -x["rss_mb"]),
+        "main_count": len(trees),
+        "sub_count": sum(1 for s in sessions if s["type"] == "sub"),
+        "zombie_count": len(zombies),
+        "total_count": len(sessions),
+        "total_mb": sum(s["rss_mb"] for s in sessions),
     }
 
 

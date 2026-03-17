@@ -48,6 +48,14 @@ class ActionRunner:
             self._kill_mcp_by_name(name, logs)
         elif action_id == "purge_cache":
             self._purge_cache(logs, password=kwargs.get("password", ""))
+        elif action_id.startswith("kill_claude_tree_"):
+            pid = action_id[len("kill_claude_tree_"):]
+            self._kill_claude_tree(pid, logs)
+        elif action_id.startswith("kill_claude_"):
+            pid = action_id[len("kill_claude_"):]
+            self._kill_claude_single(pid, logs)
+        elif action_id == "kill_all_zombies":
+            self._kill_all_zombies(logs)
         else:
             logs.append(f"알 수 없는 액션: {action_id}")
 
@@ -93,6 +101,80 @@ class ActionRunner:
         time.sleep(0.2)
         after = int(_run(f"pgrep -f '{pattern}' 2>/dev/null | wc -l").strip() or 0)
         return max(0, before - after)
+
+    @staticmethod
+    def _kill_claude_single(pid: str, logs: list[str]) -> None:
+        """단일 Claude 프로세스 종료."""
+        cmd = _run(f"ps -p {pid} -o command= 2>/dev/null")
+        if "claude" not in cmd.lower():
+            logs.append(f"PID {pid}은(는) Claude 프로세스가 아닙니다.")
+            return
+        _run(f"kill -TERM {pid} 2>/dev/null")
+        time.sleep(0.5)
+        alive = _run(f"ps -p {pid} -o pid= 2>/dev/null").strip()
+        if alive:
+            _run(f"kill -KILL {pid} 2>/dev/null")
+            logs.append(f"PID {pid} 강제 종료 (SIGKILL).")
+        else:
+            logs.append(f"PID {pid} 정상 종료 (SIGTERM).")
+
+    @staticmethod
+    def _kill_claude_tree(pid: str, logs: list[str]) -> None:
+        """메인 세션 + 모든 자식 Claude 프로세스 종료."""
+        cmd = _run(f"ps -p {pid} -o command= 2>/dev/null")
+        if "claude" not in cmd.lower():
+            logs.append(f"PID {pid}은(는) Claude 프로세스가 아닙니다.")
+            return
+        children = _run(f"pgrep -P {pid} 2>/dev/null").split()
+        claude_children = []
+        for cpid in children:
+            ccmd = _run(f"ps -p {cpid} -o command= 2>/dev/null")
+            if "claude" in ccmd.lower():
+                claude_children.append(cpid)
+        for cpid in claude_children:
+            _run(f"kill -TERM {cpid} 2>/dev/null")
+        _run(f"kill -TERM {pid} 2>/dev/null")
+        time.sleep(0.5)
+        alive = _run(f"ps -p {pid} -o pid= 2>/dev/null").strip()
+        if alive:
+            _run(f"kill -KILL {pid} 2>/dev/null")
+        logs.append(
+            f"메인 PID {pid} + 서브에이전트 {len(claude_children)}개 종료 완료."
+        )
+
+    @staticmethod
+    def _kill_all_zombies(logs: list[str]) -> None:
+        """부모 없는 좀비 Claude 서브에이전트 종료."""
+        out = _run("ps -eo pid,ppid,command")
+        main_pids: set[str] = set()
+        sub_entries: list[tuple[str, str]] = []
+        for line in out.split("\n")[1:]:
+            parts = line.strip().split(None, 2)
+            if len(parts) < 3:
+                continue
+            pid, ppid, cmd = parts[0], parts[1], parts[2]
+            if "claude" not in cmd.lower():
+                continue
+            if any(x in cmd for x in ["grep", "sysmon", "python"]):
+                continue
+            is_sub = "stream-json" in cmd and "dangerously-skip" in cmd
+            is_main = not is_sub and (
+                "claude" in cmd.split()[0] or ".local/bin/claude" in cmd
+            )
+            if is_main:
+                main_pids.add(pid)
+            elif is_sub:
+                sub_entries.append((pid, ppid))
+        killed = 0
+        for pid, ppid in sub_entries:
+            if ppid not in main_pids:
+                _run(f"kill -TERM {pid} 2>/dev/null")
+                killed += 1
+        if killed:
+            time.sleep(0.5)
+            logs.append(f"좀비 서브에이전트 {killed}개 종료 완료.")
+        else:
+            logs.append("종료할 좀비 없음.")
 
     @staticmethod
     def _purge_cache(logs: list[str], password: str) -> None:
