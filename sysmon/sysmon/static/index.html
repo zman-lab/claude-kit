@@ -206,6 +206,9 @@ tr:last-child td{border-bottom:none}
 .cc-ftag:hover{color:var(--text);border-color:var(--blue)}
 .cc-ftag.on{color:var(--text);background:rgba(77,156,240,.15);border-color:var(--blue)}
 .cc-fdiv{width:1px;height:20px;background:var(--border);margin:0 4px;align-self:center}
+.cc-search{padding:6px 12px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);font-size:13px;width:260px;outline:none;font-family:inherit}
+.cc-search:focus{border-color:var(--blue)}
+.cc-search::placeholder{color:var(--dim)}
 /* Dep graph modal */
 .dep-modal{position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:2000;backdrop-filter:blur(3px)}
 .dep-modal.show{display:flex}
@@ -296,7 +299,7 @@ tr:last-child td{border-bottom:none}
 
 <script>
 let D=null, cpuHist=[], ramHist=[], MAX_HIST=60, pollTimer=null, pendingAction=null, fetching=false;
-let ccData=null, ccFilter={type:'',value:''};
+let ccData=null, ccFilter={type:'',value:''}, ccSearch='';
 
 const TABS=['ov','ma','cs','dk','cc'];
 function tab(id){
@@ -762,7 +765,10 @@ function renderCC(){
 
   h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
     <span style="font-size:13px;color:var(--dim)">파일 ${d.total_files}개 · 워크트리 ${d.total_worktrees}개 · 스캔: ${d.scan_time}</span>
-    <button class="btn-scan" onclick="scanClaudeConfig()">Re-scan</button>
+    <div style="display:flex;gap:8px;align-items:center">
+      <input class="cc-search" id="cc-search" placeholder="검색 (파일명, 경로, 키워드)" value="${ccSearch.replace(/"/g,'&quot;')}" oninput="ccSearch=this.value;renderCC()"/>
+      <button class="btn-scan" onclick="scanClaudeConfig()">Re-scan</button>
+    </div>
   </div>`;
 
   // Filter tags
@@ -791,6 +797,17 @@ function renderCC(){
   if(ft==='cat') filtered=filtered.filter(f=>f.category===fv);
   else if(ft==='team') filtered=filtered.filter(f=>f.team===fv);
   else if(ft==='profile') filtered=filtered.filter(f=>f.project===fv);
+  // Search filter
+  if(ccSearch){
+    const q=ccSearch.toLowerCase();
+    filtered=filtered.filter(f=>
+      f.name.toLowerCase().includes(q)||
+      f.path.toLowerCase().includes(q)||
+      (f.project||'').toLowerCase().includes(q)||
+      (f.team||'').toLowerCase().includes(q)||
+      (f.desc||'').toLowerCase().includes(q)
+    );
+  }
 
   // Group filtered files by team
   const teamOrder=['global','board','airlock','elkhound','law','lawear','hps','infra'];
@@ -865,6 +882,9 @@ function renderCC(){
   if(!filtered.length) h+=`<div style="text-align:center;padding:30px;color:var(--dim);font-size:13px">필터 결과 없음</div>`;
   h+=`</div>`;
   document.getElementById('p-cc').innerHTML=h;
+  // Restore search focus
+  const si=document.getElementById('cc-search');
+  if(si&&ccSearch){si.focus();si.setSelectionRange(si.value.length,si.value.length)}
 }
 
 async function viewCCPopup(path,name){
