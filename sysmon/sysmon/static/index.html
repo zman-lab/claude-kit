@@ -167,32 +167,29 @@ tr:last-child td{border-bottom:none}
 .btn-docker.logs:hover{background:rgba(77,156,240,.22)}
 
 /* Claude Config */
-.cc-layout{display:flex;gap:12px;min-height:500px}
-.cc-tree{flex:0 0 420px;overflow-y:auto;max-height:70vh}
-.cc-viewer{flex:1;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;overflow-y:auto;max-height:70vh;font-size:13px;line-height:1.7}
-.cc-viewer h1{font-size:20px;font-weight:700;margin:16px 0 8px;color:var(--text);border-bottom:1px solid var(--border);padding-bottom:6px}
-.cc-viewer h2{font-size:16px;font-weight:700;margin:14px 0 6px;color:var(--text)}
-.cc-viewer h3{font-size:14px;font-weight:600;margin:12px 0 4px;color:var(--text)}
-.cc-viewer code{background:#1e2231;padding:1px 5px;border-radius:3px;font-size:12px;font-family:'SF Mono',Menlo,monospace}
-.cc-viewer pre{background:#1e2231;border:1px solid var(--border);border-radius:6px;padding:12px;overflow-x:auto;font-size:11px;line-height:1.5;margin:8px 0}
-.cc-viewer pre code{background:none;padding:0}
-.cc-viewer table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12px}
-.cc-viewer table th,.cc-viewer table td{border:1px solid var(--border);padding:4px 8px;text-align:left}
-.cc-viewer table th{background:#1e2231;font-weight:600}
-.cc-viewer blockquote{border-left:3px solid var(--blue);padding:4px 12px;margin:8px 0;color:var(--dim);background:rgba(77,156,240,.05)}
-.cc-viewer ul,.cc-viewer ol{padding-left:20px;margin:4px 0}
-.cc-viewer a{color:var(--blue);text-decoration:none}
-.cc-viewer strong{color:var(--text);font-weight:700}
-.cc-viewer hr{border:none;border-top:1px solid var(--border);margin:12px 0}
-.cc-file{display:flex;align-items:center;gap:6px;padding:4px 8px;border-radius:4px;cursor:pointer;font-size:11px;transition:.1s}
+.cc-tree{max-height:65vh;overflow-y:auto}
+.cc-file{display:flex;align-items:center;gap:6px;padding:5px 8px;border-radius:4px;cursor:pointer;font-size:11px;transition:.1s}
 .cc-file:hover{background:rgba(77,156,240,.1)}
-.cc-file.active{background:rgba(77,156,240,.15);color:var(--blue)}
 .cc-file .fname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cc-file .fmeta{color:var(--dim);font-size:10px;white-space:nowrap}
-.cc-group{margin-bottom:12px}
-.cc-group-hdr{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);padding:6px 8px;display:flex;justify-content:space-between;cursor:pointer}
+.cc-group{margin-bottom:14px}
+.cc-group-hdr{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--dim);padding:6px 8px;display:flex;justify-content:space-between;cursor:pointer;border-bottom:1px solid var(--border)}
 .cc-group-hdr:hover{color:var(--text)}
 .cc-icon{font-size:12px;margin-right:2px}
+.cc-team{display:inline-block;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:600;margin-left:4px}
+.cc-team.t-global{background:rgba(155,109,240,.15);color:var(--purple)}
+.cc-team.t-board{background:rgba(77,156,240,.15);color:var(--blue)}
+.cc-team.t-airlock{background:rgba(155,109,240,.15);color:var(--purple)}
+.cc-team.t-elkhound{background:rgba(240,146,62,.15);color:var(--orange)}
+.cc-team.t-law{background:rgba(232,200,64,.15);color:var(--yellow)}
+.cc-team.t-lawear{background:rgba(61,200,208,.15);color:var(--cyan)}
+.cc-team.t-hps{background:rgba(240,96,144,.15);color:var(--pink)}
+.cc-team.t-infra{background:rgba(61,214,140,.15);color:var(--green)}
+.cc-refs{font-size:9px;padding:1px 4px;border-radius:3px;margin-left:3px}
+.cc-refs.in{background:rgba(61,214,140,.12);color:var(--green)}
+.cc-refs.out{background:rgba(77,156,240,.12);color:var(--blue)}
+.cc-inherit{font-size:9px;color:var(--dim);margin-left:12px;padding:2px 0}
+.cc-dates{font-size:9px;color:var(--dim)}
 .wt-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 14px;margin-bottom:6px;font-size:12px}
 .wt-card .wt-name{font-weight:700;color:var(--green)}
 .wt-card .wt-meta{color:var(--dim);font-size:11px;margin-top:2px}
@@ -290,7 +287,7 @@ tr:last-child td{border-bottom:none}
 
 <script>
 let D=null, cpuHist=[], ramHist=[], MAX_HIST=60, pollTimer=null, pendingAction=null, fetching=false;
-let ccData=null, ccSelectedFile=null;
+let ccData=null;
 
 const TABS=['ov','ma','cs','dk','cc'];
 function tab(id){
@@ -748,56 +745,72 @@ function renderCC(){
   const d=ccData;
   let h='';
 
-  // Top bar
   h+=`<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-    <div>
-      <span style="font-size:12px;color:var(--dim)">파일 ${d.total_files}개 · 워크트리 ${d.total_worktrees}개 · 스캔: ${d.scan_time}</span>
-    </div>
+    <span style="font-size:12px;color:var(--dim)">파일 ${d.total_files}개 · 워크트리 ${d.total_worktrees}개 · 스캔: ${d.scan_time}</span>
     <button class="btn-scan" onclick="scanClaudeConfig()">Re-scan</button>
   </div>`;
 
-  // Stats cards
+  // Stats
   const st=d.stats||{};
   h+=`<div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">`;
-  const catLabels={claude_md:['CLAUDE.md','var(--blue)'],skill:['Skills','var(--green)'],memory_index:['Memory Index','var(--orange)'],memory:['Memory','var(--yellow)'],settings:['Settings','var(--purple)']};
-  for(const[k,v]of Object.entries(catLabels)){
+  const catL={claude_md:['CLAUDE.md','var(--blue)'],skill:['Skills','var(--green)'],memory_index:['Memory Index','var(--orange)'],memory:['Memory','var(--yellow)'],settings:['Settings','var(--purple)']};
+  for(const[k,v]of Object.entries(catL)){
     const cnt=st[k]||0;
     if(cnt) h+=`<div class="card" style="padding:8px 14px;margin:0;min-width:80px"><div style="font-size:18px;font-weight:800;color:${v[1]}">${cnt}</div><div style="font-size:10px;color:var(--dim)">${v[0]}</div></div>`;
   }
   h+=`</div>`;
 
-  // Main layout: tree + viewer
-  h+=`<div class="cc-layout"><div class="cc-tree" id="cc-tree">`;
-
-  // Group files by category
-  const groups={claude_md:{label:'CLAUDE.md',icon:'📄',items:[]},skill:{label:'Skills',icon:'⚡',items:[]},memory_index:{label:'Memory Index',icon:'🗂️',items:[]},memory:{label:'Memory Files',icon:'📝',items:[]},settings:{label:'Settings',icon:'⚙️',items:[]}};
+  // Group by team with hierarchy: global first, then teams
+  const teamOrder=['global','board','airlock','elkhound','law','lawear','hps','infra'];
+  const teamLabel={global:'🌍 Global',board:'📋 Board',airlock:'🔐 Airlock',elkhound:'🐕 Elkhound',law:'⚖️ Law',lawear:'⚖️ Lawear',hps:'🎮 HPS',infra:'🛠️ Infra'};
+  const byTeam={};
   d.files.forEach(f=>{
-    const g=groups[f.category];
-    if(g) g.items.push(f);
+    const t=f.team||'global';
+    if(!byTeam[t]) byTeam[t]={claude_md:[],skill:[],memory_index:[],memory:[],settings:[]};
+    if(byTeam[t][f.category]) byTeam[t][f.category].push(f);
   });
 
-  for(const[cat,g]of Object.entries(groups)){
-    if(!g.items.length) continue;
-    const hasDeps=cat==='claude_md'||cat==='skill'||cat==='memory_index';
-    h+=`<div class="cc-group"><div class="cc-group-hdr"><span>${g.icon} ${g.label} (${g.items.length})</span></div>`;
-    g.items.forEach(f=>{
-      const active=ccSelectedFile===f.path?'active':'';
-      h+=`<div class="cc-file ${active}" onclick="viewCCFile('${f.path.replace(/'/g,"\\'")}')">
-        <span class="cc-icon">${g.icon}</span>
-        <span class="fname" title="${f.path}">${f.project?'['+f.project+'] ':''}${f.name}</span>
-        ${hasDeps?`<button class="btn-deps" onclick="event.stopPropagation();showDeps('${f.path.replace(/'/g,"\\'")}')">deps</button>`:''}
-        <span class="fmeta">${f.modified}</span>
-      </div>`;
-    });
-    h+=`</div>`;
-  }
+  h+=`<div class="cc-tree">`;
+  const orderedTeams=teamOrder.filter(t=>byTeam[t]);
+  Object.keys(byTeam).forEach(t=>{if(!orderedTeams.includes(t))orderedTeams.push(t)});
 
-  // Worktrees section
+  orderedTeams.forEach(team=>{
+    const tdata=byTeam[team];
+    if(!tdata) return;
+    const total=Object.values(tdata).reduce((a,b)=>a+b.length,0);
+    if(!total) return;
+    const lbl=teamLabel[team]||('📁 '+team);
+    h+=`<div class="cc-group"><div class="cc-group-hdr"><span>${lbl} (${total})</span>${team!=='global'?'<span style="font-size:9px">← Global 상속</span>':''}</div>`;
+
+    const catIcons={claude_md:'📄',skill:'⚡',memory_index:'🗂️',memory:'📝',settings:'⚙️'};
+    const catNames={claude_md:'CLAUDE.md',skill:'Skills',memory_index:'Memory Index',memory:'Memory',settings:'Settings'};
+    for(const[cat,items]of Object.entries(tdata)){
+      if(!items.length) continue;
+      if(items.length>1) h+=`<div style="font-size:10px;color:var(--dim);padding:4px 8px">${catIcons[cat]} ${catNames[cat]} (${items.length})</div>`;
+      items.forEach(f=>{
+        const hasDeps=cat==='claude_md'||cat==='skill'||cat==='memory_index';
+        const refsIn=f.refs_in||0, refsOut=f.refs_out||0;
+        h+=`<div class="cc-file" onclick="viewCCPopup('${f.path.replace(/'/g,"\\'")}','${f.name.replace(/'/g,"\\'")}')">
+          <span class="cc-icon">${catIcons[cat]}</span>
+          <span class="fname" title="${f.path}">${f.project?'['+f.project+'] ':''}${f.name}</span>`;
+        if(refsIn) h+=`<span class="cc-refs in" title="다른 파일에서 ${refsIn}번 참조됨">in:${refsIn}</span>`;
+        if(refsOut) h+=`<span class="cc-refs out" title="내부에서 ${refsOut}개 스킬 호출">out:${refsOut}</span>`;
+        if(hasDeps) h+=`<button class="btn-deps" onclick="event.stopPropagation();showDeps('${f.path.replace(/'/g,"\\'")}')">deps</button>`;
+        h+=`<span class="cc-dates" title="생성: ${f.created}&#10;수정: ${f.modified}">📅${f.created} ✏️${f.modified}</span>`;
+        h+=`</div>`;
+        if(f.parent) h+=`<div class="cc-inherit">↑ 상속: ${f.parent.split('/').slice(-2).join('/')}</div>`;
+      });
+    }
+    h+=`</div>`;
+  });
+
+  // Worktrees
   if(d.worktrees.length){
     h+=`<div class="cc-group"><div class="cc-group-hdr"><span>🌿 Worktrees (${d.worktrees.length})</span></div>`;
     d.worktrees.forEach(w=>{
+      const tc=w.team||'global';
       h+=`<div class="wt-card">
-        <div class="wt-name">${w.branch||'(detached)'}</div>
+        <div class="wt-name">${w.branch||'(detached)'} <span class="cc-team t-${tc}">${tc}</span></div>
         <div class="wt-meta">[${w.project}] ${w.path}</div>
         ${w.commit?`<div class="wt-meta">${w.commit}</div>`:''}
       </div>`;
@@ -805,31 +818,63 @@ function renderCC(){
     h+=`</div>`;
   }
 
-  h+=`</div><div class="cc-viewer" id="cc-viewer"><div style="color:var(--dim);text-align:center;padding:40px">파일을 클릭하면 여기에 표시됩니다</div></div></div>`;
-
+  h+=`</div>`;
   document.getElementById('p-cc').innerHTML=h;
 }
 
-async function viewCCFile(path){
-  ccSelectedFile=path;
-  // Re-render tree to update active state
-  renderCC();
-  const viewer=document.getElementById('cc-viewer');
-  viewer.innerHTML='<div style="color:var(--dim)">로딩 중...</div>';
+async function viewCCPopup(path,name){
   try{
     const r=await fetch('/api/claude-file?path='+encodeURIComponent(path));
     const d=await r.json();
-    if(d.error){viewer.innerHTML='<div style="color:var(--red)">'+d.error+'</div>';return}
-    if(path.endsWith('.md')){
-      viewer.innerHTML=renderMarkdown(d.content);
-    }else if(path.endsWith('.json')){
-      viewer.innerHTML='<pre><code>'+escHtml(d.content)+'</code></pre>';
-    }else{
-      viewer.innerHTML='<pre>'+escHtml(d.content)+'</pre>';
-    }
-  }catch(e){
-    viewer.innerHTML='<div style="color:var(--red)">로드 실패: '+e.message+'</div>';
-  }
+    if(d.error){alert(d.error);return}
+    const content=d.content;
+    const rendered=path.endsWith('.md')?renderMarkdown(content):'<pre style="white-space:pre-wrap;font-size:12px">'+escHtml(content)+'</pre>';
+    const w=window.open('','cc_viewer_'+Date.now(),'width=900,height=700,menubar=no,toolbar=no');
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${escHtml(name)}</title>
+<style>
+:root{--bg:#0c0e14;--card:#151821;--border:#1e2231;--text:#e8e8ec;--dim:#6b7084;--blue:#4d9cf0;--green:#3dd68c}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,'SF Pro Display',sans-serif;background:var(--bg);color:var(--text);font-size:13px;line-height:1.7}
+.toolbar{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--card);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:10}
+.toolbar h2{font-size:14px;font-weight:700;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toolbar .path{font-size:10px;color:var(--dim);margin-left:8px}
+.btn{padding:5px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);color:var(--text);cursor:pointer;font-size:11px}
+.btn:hover{background:#1e2231;border-color:var(--blue)}
+.btn.copy{background:rgba(61,214,140,.1);color:var(--green);border-color:rgba(61,214,140,.3)}
+.content{padding:20px 24px;max-width:900px}
+h1{font-size:20px;font-weight:700;margin:18px 0 8px;border-bottom:1px solid var(--border);padding-bottom:6px}
+h2{font-size:16px;font-weight:700;margin:16px 0 6px}
+h3{font-size:14px;font-weight:600;margin:12px 0 4px}
+code{background:#1e2231;padding:1px 5px;border-radius:3px;font-size:12px;font-family:'SF Mono',Menlo,monospace}
+pre{background:#1e2231;border:1px solid var(--border);border-radius:6px;padding:12px;overflow-x:auto;font-size:11px;line-height:1.5;margin:8px 0}
+pre code{background:none;padding:0}
+table{border-collapse:collapse;width:100%;margin:8px 0;font-size:12px}
+th,td{border:1px solid var(--border);padding:4px 8px;text-align:left}
+th{background:#1e2231;font-weight:600}
+blockquote{border-left:3px solid var(--blue);padding:4px 12px;margin:8px 0;color:var(--dim);background:rgba(77,156,240,.05)}
+ul,ol{padding-left:20px;margin:4px 0}
+a{color:var(--blue);text-decoration:none}
+strong{color:var(--text);font-weight:700}
+hr{border:none;border-top:1px solid var(--border);margin:12px 0}
+</style></head><body>
+<div class="toolbar">
+  <h2>${escHtml(name)}</h2>
+  <span class="path">${escHtml(path)}</span>
+  <button class="btn copy" id="copy-btn" onclick="copyAll()">Copy</button>
+  <button class="btn" onclick="window.close()">닫기</button>
+</div>
+<div class="content">${rendered}</div>
+<script>
+const RAW=${JSON.stringify(content)};
+async function copyAll(){
+  try{await navigator.clipboard.writeText(RAW);
+    document.getElementById('copy-btn').textContent='Copied!';
+    setTimeout(()=>{document.getElementById('copy-btn').textContent='Copy'},1500);
+  }catch(e){alert('Copy failed: '+e.message)}
+}
+</script></body></html>`);
+    w.document.close();
+  }catch(e){alert('로드 실패: '+e.message)}
 }
 
 function escHtml(s){const d=document.createElement('div');d.textContent=s;return d.innerHTML}

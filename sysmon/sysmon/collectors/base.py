@@ -532,49 +532,66 @@ fetchLogs();if(document.getElementById('auto-refresh').checked)startAR();
 
 # ── Claude Config Scanner ──
 
-_SCAN_PROJECTS: list[tuple[str, str]] = [
-    ("board", "/Users/nhn/zman-lab/board"),
-    ("law", "/Users/nhn/zman-lab/law"),
-    ("lawear", "/Users/nhn/zman-lab/lawear"),
-    ("claude-kit", "/Users/nhn/zman-lab/claude-kit"),
-    ("claude-core", "/Users/nhn/zman-lab/claude-core"),
-    ("claude-utils", "/Users/nhn/zman-lab/claude-utils"),
-    ("sdk", "/Users/nhn/zman-lab/sdk"),
-    ("init", "/Users/nhn/zman-lab/init"),
-    ("dev-airlock", "/Users/nhn/dev-airlock"),
-    ("hps", "/Users/nhn/work/hangame-poker-server"),
-    ("gia", "/Users/nhn/work/gia"),
-    ("betting_base", "/Users/nhn/work/betting_base"),
-    ("ideaworks", "/Users/nhn/work/ideaworks"),
-    ("elkhound", "/Users/nhn/work/ideaworks/product/elkhound"),
+_HOME = os.path.expanduser("~")
+
+_SCAN_PROJECTS: list[tuple[str, str, str]] = [
+    # (name, relative_path_from_home, team)
+    ("board", "zman-lab/board", "board"),
+    ("law", "zman-lab/law", "law"),
+    ("lawear", "zman-lab/lawear", "lawear"),
+    ("claude-kit", "zman-lab/claude-kit", "infra"),
+    ("claude-core", "zman-lab/claude-core", "infra"),
+    ("claude-utils", "zman-lab/claude-utils", "infra"),
+    ("sdk", "zman-lab/sdk", "infra"),
+    ("init", "zman-lab/init", "global"),
+    ("dev-airlock", "dev-airlock", "airlock"),
+    ("hps", "work/hangame-poker-server", "hps"),
+    ("gia", "work/gia", "hps"),
+    ("betting_base", "work/betting_base", "hps"),
+    ("ideaworks", "work/ideaworks", "infra"),
+    ("elkhound", "work/ideaworks/product/elkhound", "elkhound"),
 ]
 
-_CLAUDE_HOMES: list[str] = [
-    os.path.expanduser("~/.claude"),
-    os.path.expanduser("~/.claude-2nd"),
-]
+_CLAUDE_HOMES: list[str] = []
+for _d in sorted(os.listdir(_HOME)) if os.path.isdir(_HOME) else []:
+    _p = os.path.join(_HOME, _d)
+    if _d.startswith(".claude") and os.path.isdir(_p):
+        _CLAUDE_HOMES.append(_p)
+if not _CLAUDE_HOMES:
+    _CLAUDE_HOMES = [os.path.join(_HOME, ".claude")]
 
 
 def _scan_claude_config() -> dict[str, Any]:
-    """Claude Code 관련 파일 전체 스캔 (on-demand, NOT in poll)."""
-    import glob
-
+    """Claude Code 설정 파일 스캔 + 팀/상속/참조 분석."""
     files: list[dict[str, Any]] = []
     worktrees: list[dict[str, Any]] = []
+    skill_names: dict[str, str] = {}  # skill_name -> file_path
 
-    def _finfo(path: str, category: str, project: str = "", desc: str = "") -> dict[str, Any] | None:
+    def _finfo(
+        path: str, category: str, project: str = "",
+        team: str = "global", desc: str = "", parent: str = "",
+    ) -> dict[str, Any] | None:
         try:
             st = os.stat(path)
+            created = time.strftime(
+                "%Y-%m-%d %H:%M",
+                time.localtime(st.st_birthtime if hasattr(st, "st_birthtime") else st.st_ctime),
+            )
+            modified = time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime))
             return {
                 "path": path,
                 "name": os.path.basename(path),
                 "category": category,
                 "project": project,
+                "team": team,
                 "desc": desc,
+                "parent": parent,
                 "size": st.st_size,
-                "created": time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_birthtime if hasattr(st, 'st_birthtime') else st.st_ctime)),
-                "modified": time.strftime("%Y-%m-%d %H:%M", time.localtime(st.st_mtime)),
+                "created": created,
+                "modified": modified,
                 "is_dir": os.path.isdir(path),
+                "refs_in": 0,
+                "refs_out": 0,
             }
         except (OSError, AttributeError):
             return None
@@ -585,29 +602,30 @@ def _scan_claude_config() -> dict[str, Any]:
             continue
         profile = os.path.basename(home)
 
-        # CLAUDE.md
         cm = os.path.join(home, "CLAUDE.md")
         if os.path.isfile(cm):
-            f = _finfo(cm, "claude_md", profile, f"글로벌 CLAUDE.md ({profile})")
-            if f: files.append(f)
+            f = _finfo(cm, "claude_md", profile, "global", f"글로벌 CLAUDE.md ({profile})")
+            if f:
+                files.append(f)
 
-        # settings
         for sf in ["settings.json", "settings.local.json"]:
             sp = os.path.join(home, sf)
             if os.path.isfile(sp):
-                f = _finfo(sp, "settings", profile, f"{sf} ({profile})")
-                if f: files.append(f)
+                f = _finfo(sp, "settings", profile, "global", f"{sf} ({profile})")
+                if f:
+                    files.append(f)
 
-        # Global commands (skills)
         cmd_dir = os.path.join(home, "commands")
         if os.path.isdir(cmd_dir):
             for fn in sorted(os.listdir(cmd_dir)):
                 fp = os.path.join(cmd_dir, fn)
                 if os.path.isfile(fp) and fn.endswith(".md"):
-                    f = _finfo(fp, "skill", profile, f"글로벌 스킬: {fn[:-3]}")
-                    if f: files.append(f)
+                    sname = fn[:-3]
+                    f = _finfo(fp, "skill", profile, "global", f"글로벌 스킬: {sname}")
+                    if f:
+                        files.append(f)
+                        skill_names[sname] = fp
 
-        # Projects memory dirs
         proj_dir = os.path.join(home, "projects")
         if os.path.isdir(proj_dir):
             for pname in sorted(os.listdir(proj_dir)):
@@ -616,62 +634,126 @@ def _scan_claude_config() -> dict[str, Any]:
                     continue
                 mem_dir = os.path.join(pp, "memory")
                 if os.path.isdir(mem_dir):
+                    # Detect team from project dir name
+                    mem_team = "global"
+                    pname_lower = pname.lower()
+                    for _, _, t in _SCAN_PROJECTS:
+                        if t != "global" and t in pname_lower:
+                            mem_team = t
+                            break
                     mm = os.path.join(mem_dir, "MEMORY.md")
                     if os.path.isfile(mm):
-                        f = _finfo(mm, "memory_index", profile, f"메모리 인덱스: {pname}")
-                        if f: files.append(f)
+                        f = _finfo(mm, "memory_index", profile, mem_team, f"메모리 인덱스: {pname}")
+                        if f:
+                            files.append(f)
                     for mf in sorted(os.listdir(mem_dir)):
                         mfp = os.path.join(mem_dir, mf)
                         if os.path.isfile(mfp) and mf != "MEMORY.md" and mf.endswith(".md"):
-                            f = _finfo(mfp, "memory", profile, f"메모리: {mf[:-3]}")
-                            if f: files.append(f)
+                            f = _finfo(mfp, "memory", profile, mem_team, f"메모리: {mf[:-3]}")
+                            if f:
+                                files.append(f)
 
     # 2. init global skills
-    init_cmd = os.path.expanduser("~/init/claude/commands")
+    init_cmd = os.path.join(_HOME, "init", "claude", "commands")
     if os.path.isdir(init_cmd):
         for fn in sorted(os.listdir(init_cmd)):
             fp = os.path.join(init_cmd, fn)
             if os.path.isfile(fp) and fn.endswith(".md"):
-                f = _finfo(fp, "skill", "init", f"글로벌 스킬 (init): {fn[:-3]}")
-                if f: files.append(f)
+                sname = fn[:-3]
+                f = _finfo(fp, "skill", "init", "global", f"글로벌 스킬 (init): {sname}")
+                if f:
+                    files.append(f)
+                    skill_names[sname] = fp
 
     # 3. Per-project files
-    for proj_name, proj_path in _SCAN_PROJECTS:
+    for proj_name, rel_path, team in _SCAN_PROJECTS:
+        proj_path = os.path.join(_HOME, rel_path)
         if not os.path.isdir(proj_path):
             continue
 
-        # CLAUDE.md at root
+        # Find global CLAUDE.md parent for inheritance
+        global_cm = ""
+        for home in _CLAUDE_HOMES:
+            gcm = os.path.join(home, "CLAUDE.md")
+            if os.path.isfile(gcm):
+                global_cm = gcm
+                break
+
         cm = os.path.join(proj_path, "CLAUDE.md")
         if os.path.isfile(cm):
-            f = _finfo(cm, "claude_md", proj_name, f"프로젝트 CLAUDE.md")
-            if f: files.append(f)
+            f = _finfo(cm, "claude_md", proj_name, team, "프로젝트 CLAUDE.md", global_cm)
+            if f:
+                files.append(f)
 
-        # .claude/ directory
         dot_claude = os.path.join(proj_path, ".claude")
         if os.path.isdir(dot_claude):
-            # .claude/settings.local.json
             for sf in ["settings.json", "settings.local.json"]:
                 sp = os.path.join(dot_claude, sf)
                 if os.path.isfile(sp):
-                    f = _finfo(sp, "settings", proj_name, f"{sf}")
-                    if f: files.append(f)
+                    f = _finfo(sp, "settings", proj_name, team, f"{sf}")
+                    if f:
+                        files.append(f)
 
-            # .claude/commands/ (project skills)
             pcmd = os.path.join(dot_claude, "commands")
             if os.path.isdir(pcmd):
                 for fn in sorted(os.listdir(pcmd)):
                     fp = os.path.join(pcmd, fn)
                     if os.path.isfile(fp) and fn.endswith(".md"):
-                        f = _finfo(fp, "skill", proj_name, f"프로젝트 스킬: {fn[:-3]}")
-                        if f: files.append(f)
+                        sname = fn[:-3]
+                        # Check if overrides a global skill
+                        global_parent = skill_names.get(sname, "")
+                        f = _finfo(
+                            fp, "skill", proj_name, team,
+                            f"프로젝트 스킬: {sname}", global_parent,
+                        )
+                        if f:
+                            files.append(f)
+                            skill_names[sname] = fp
 
-    # 4. Worktrees
+    # 4. Cross-reference analysis
+    all_skill_names = set(skill_names.keys())
+    file_path_to_idx: dict[str, int] = {f["path"]: i for i, f in enumerate(files)}
+    skill_name_to_paths: dict[str, list[int]] = {}
+    for sn, sp in skill_names.items():
+        if sp in file_path_to_idx:
+            skill_name_to_paths.setdefault(sn, []).append(file_path_to_idx[sp])
+
+    # Read each analyzable file and count references
+    for i, f in enumerate(files):
+        if f["category"] not in ("claude_md", "skill", "memory_index"):
+            continue
+        try:
+            with open(f["path"], encoding="utf-8", errors="replace") as fh:
+                content = fh.read(200_000)
+        except Exception:
+            continue
+
+        # Find skill references
+        refs_out = set()
+        for match in re.findall(r"`/([a-zA-Z][\w-]*)`", content):
+            if match in all_skill_names:
+                refs_out.add(match)
+        for match in re.findall(
+            r'(?:skill|Skill)\s*(?:=\s*|:\s*|tool.*?skill.*?)["\']([a-zA-Z][\w-]*)["\']',
+            content,
+        ):
+            if match in all_skill_names:
+                refs_out.add(match)
+
+        files[i]["refs_out"] = len(refs_out)
+
+        # Increment refs_in for referenced skills
+        for sn in refs_out:
+            for idx in skill_name_to_paths.get(sn, []):
+                files[idx]["refs_in"] = files[idx].get("refs_in", 0) + 1
+
+    # 5. Worktrees
     seen_git_roots: set[str] = set()
-    for proj_name, proj_path in _SCAN_PROJECTS:
+    for proj_name, rel_path, team in _SCAN_PROJECTS:
+        proj_path = os.path.join(_HOME, rel_path)
         git_root = proj_path
-        # elkhound -> ideaworks
         if proj_name == "elkhound":
-            git_root = "/Users/nhn/work/ideaworks"
+            git_root = os.path.join(_HOME, "work", "ideaworks")
         if git_root in seen_git_roots or not os.path.isdir(git_root):
             continue
         seen_git_roots.add(git_root)
@@ -683,43 +765,41 @@ def _scan_claude_config() -> dict[str, Any]:
                 if current_wt and current_wt.get("path") != git_root:
                     branch = current_wt.get("branch", "").replace("refs/heads/", "")
                     wt_path = current_wt.get("path", "")
-                    # Get last commit info
-                    commit_info = _run(f"git -C {git_root} log -1 --format='%h %s (%cr)' {branch} 2>/dev/null")
+                    commit_info = _run(
+                        f"git -C {git_root} log -1 --format='%h %s (%cr)' {branch} 2>/dev/null"
+                    )
                     worktrees.append({
-                        "project": proj_name,
-                        "git_root": git_root,
-                        "path": wt_path,
-                        "branch": branch,
-                        "commit": commit_info,
-                        "bare": current_wt.get("bare") == "true",
+                        "project": proj_name, "team": team,
+                        "git_root": git_root, "path": wt_path,
+                        "branch": branch, "commit": commit_info,
                     })
                 current_wt = {"path": line[9:]}
             elif line.startswith("branch "):
                 current_wt["branch"] = line[7:]
-            elif line == "bare":
-                current_wt["bare"] = "true"
-        # Last entry
         if current_wt and current_wt.get("path") != git_root:
             branch = current_wt.get("branch", "").replace("refs/heads/", "")
             wt_path = current_wt.get("path", "")
-            commit_info = _run(f"git -C {git_root} log -1 --format='%h %s (%cr)' {branch} 2>/dev/null")
+            commit_info = _run(
+                f"git -C {git_root} log -1 --format='%h %s (%cr)' {branch} 2>/dev/null"
+            )
             worktrees.append({
-                "project": proj_name,
-                "git_root": git_root,
-                "path": wt_path,
-                "branch": branch,
-                "commit": commit_info,
+                "project": proj_name, "team": team,
+                "git_root": git_root, "path": wt_path,
+                "branch": branch, "commit": commit_info,
             })
 
     # Stats
     cats: dict[str, int] = {}
+    teams: dict[str, int] = {}
     for f in files:
         cats[f["category"]] = cats.get(f["category"], 0) + 1
+        teams[f["team"]] = teams.get(f["team"], 0) + 1
 
     return {
         "files": files,
         "worktrees": worktrees,
         "stats": cats,
+        "teams": teams,
         "total_files": len(files),
         "total_worktrees": len(worktrees),
         "scan_time": time.strftime("%H:%M:%S KST"),
