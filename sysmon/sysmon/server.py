@@ -71,6 +71,25 @@ def _make_handler(
                 self._json_response(collector.collect_all())
             elif path == "/api/quick":
                 self._json_response(collector.collect_quick())
+            elif path.startswith("/api/docker-logs/"):
+                container = path.split("/api/docker-logs/")[1]
+                qs = parse_qs(urlparse(self.path).query)
+                tail = int(qs.get("tail", ["200"])[0])
+                level = qs.get("level", [None])[0]
+                search = qs.get("search", [None])[0]
+                from .collectors.base import _get_docker_logs
+                self._json_response(_get_docker_logs(container, tail, level, search))
+            elif path == "/docker-log":
+                qs = parse_qs(urlparse(self.path).query)
+                name = qs.get("name", [""])[0]
+                if name:
+                    from .collectors.base import _docker_log_html
+                    self.send_response(200)
+                    self.send_header("Content-Type", "text/html; charset=utf-8")
+                    self.end_headers()
+                    self.wfile.write(_docker_log_html(name).encode())
+                else:
+                    self.send_error(400)
             else:
                 self.send_error(404)
 

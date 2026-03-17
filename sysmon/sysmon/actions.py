@@ -46,6 +46,15 @@ class ActionRunner:
         elif action_id.startswith("kill_mcp_"):
             name = action_id[len("kill_mcp_"):]
             self._kill_mcp_by_name(name, logs)
+        elif action_id.startswith("docker_stop_"):
+            name = action_id[len("docker_stop_"):]
+            self._docker_action(name, "stop", logs)
+        elif action_id.startswith("docker_start_"):
+            name = action_id[len("docker_start_"):]
+            self._docker_action(name, "start", logs)
+        elif action_id.startswith("docker_restart_"):
+            name = action_id[len("docker_restart_"):]
+            self._docker_action(name, "restart", logs)
         elif action_id == "purge_cache":
             self._purge_cache(logs, password=kwargs.get("password", ""))
         elif action_id.startswith("kill_claude_tree_"):
@@ -101,6 +110,15 @@ class ActionRunner:
         time.sleep(0.2)
         after = int(_run(f"pgrep -f '{pattern}' 2>/dev/null | wc -l").strip() or 0)
         return max(0, before - after)
+
+    @staticmethod
+    def _docker_action(name: str, action: str, logs: list[str]) -> None:
+        """Docker 컨테이너 stop/start/restart."""
+        result = _run(f"docker {action} {name} 2>&1", timeout=30)
+        if result:
+            logs.append(f"{name}: docker {action} → {result}")
+        else:
+            logs.append(f"{name}: docker {action} 완료.")
 
     @staticmethod
     def _kill_claude_single(pid: str, logs: list[str]) -> None:

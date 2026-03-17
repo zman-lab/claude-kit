@@ -88,4 +88,25 @@ def create_router(prefix: str = "/sysmon", token: Optional[str] = None) -> Any:
         result["metrics"] = collector.collect_all()
         return JSONResponse(result)
 
+    @router.get("/api/docker-logs/{container}")
+    async def docker_logs(container: str, request: Request) -> JSONResponse:
+        if not _check_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        from .collectors.base import _get_docker_logs
+        qs = request.query_params
+        tail = int(qs.get("tail", "200"))
+        level = qs.get("level")
+        search = qs.get("search")
+        return JSONResponse(_get_docker_logs(container, tail, level, search))
+
+    @router.get("/docker-log")
+    async def docker_log_page(request: Request) -> HTMLResponse:
+        if not _check_token(request):
+            return HTMLResponse("Unauthorized", status_code=401)
+        name = request.query_params.get("name", "")
+        if not name:
+            return HTMLResponse("name parameter required", status_code=400)
+        from .collectors.base import _docker_log_html
+        return HTMLResponse(_docker_log_html(name))
+
     return router
