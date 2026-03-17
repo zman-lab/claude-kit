@@ -290,12 +290,14 @@ tr:last-child td{border-bottom:none}
 
 <script>
 let D=null, cpuHist=[], ramHist=[], MAX_HIST=60, pollTimer=null, pendingAction=null, fetching=false;
+let ccData=null, ccSelectedFile=null;
 
 const TABS=['ov','ma','cs','dk','cc'];
 function tab(id){
   const idx=TABS.indexOf(id);
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===idx));
   TABS.forEach(t=>document.getElementById('p-'+t).classList.toggle('on',t===id));
+  if(id==='cc'&&!ccData) renderCC();
 }
 
 function pctColor(p){return p>=90?'var(--red)':p>=70?'var(--orange)':p>=50?'var(--yellow)':'var(--green)'}
@@ -722,7 +724,6 @@ function openDockerLog(name){
 }
 
 // ─── Claude Config ───
-let ccData=null, ccSelectedFile=null;
 
 async function scanClaudeConfig(){
   const btn=document.querySelector('.btn-scan');
