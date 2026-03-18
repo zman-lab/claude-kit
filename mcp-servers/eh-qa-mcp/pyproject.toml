@@ -1,5 +1,5 @@
 [project]
-name = "elkhound-qa-mcp"
+name = "eh-qa-mcp"
 version = "0.1.0"
 description = "ElkHound 웹서비스 QA 자동화 MCP 서버"
 requires-python = ">=3.10"
@@ -16,4 +16,4 @@ build-backend = "hatchling.build"
 packages = ["src"]
 
 [project.scripts]
-elkhound-qa-mcp = "src.server:main"
+eh-qa-mcp = "src.server:main"
