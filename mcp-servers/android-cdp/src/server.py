@@ -5,9 +5,14 @@ Android CDP MCP Server
 """
 import base64
 import json
+import logging
 import os
 import subprocess
 from typing import Optional
+
+# MCP 라이브러리 로깅 억제 (stderr 출력이 Claude Code 연결을 방해)
+logging.getLogger("mcp").setLevel(logging.ERROR)
+logging.getLogger("uvicorn").setLevel(logging.ERROR)
 
 import websocket
 from mcp.server.fastmcp import FastMCP
