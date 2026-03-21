@@ -79,6 +79,9 @@ def _make_handler(
                 search = qs.get("search", [None])[0]
                 from .collectors.base import _get_docker_logs
                 self._json_response(_get_docker_logs(container, tail, level, search))
+            elif path == "/api/process-desc":
+                from .collectors.base import _load_process_desc
+                self._json_response(_load_process_desc())
             elif path == "/api/claude-config":
                 from .collectors.base import _scan_claude_config
                 self._json_response(_scan_claude_config())
@@ -116,7 +119,25 @@ def _make_handler(
             if not self._check_auth():
                 return
             path = urlparse(self.path).path
-            if path.startswith("/api/action/"):
+            if path == "/api/process-desc":
+                content_length = int(self.headers.get("Content-Length", 0))
+                if content_length <= 0:
+                    self.send_error(400, "Body required")
+                    return
+                try:
+                    body = self.rfile.read(content_length)
+                    data = json.loads(body)
+                except (json.JSONDecodeError, ValueError):
+                    self.send_error(400, "Invalid JSON")
+                    return
+                from .collectors.base import _save_process_desc
+                try:
+                    _save_process_desc(data)
+                except OSError:
+                    self.send_error(500, "Save failed")
+                    return
+                self._json_response({"ok": True})
+            elif path.startswith("/api/action/"):
                 action_id = path.split("/api/action/")[1]
                 # JSON body 파싱
                 kwargs: dict[str, Any] = {}

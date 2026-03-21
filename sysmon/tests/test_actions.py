@@ -257,3 +257,9 @@ class TestLaunchdAction:
         assert "duration_ms" in result
         assert isinstance(result["duration_ms"], (int, float))
         assert result["duration_ms"] >= 0
+
+    def test_launchd_invalid_label_rejected(self):
+        """쉘 메타문자가 포함된 레이블은 인젝션 방지를 위해 거부해야 한다."""
+        runner = ActionRunner()
+        result = runner.run("launchd_disable_com.test; rm -rf /")
+        assert any("유효하지 않은" in l for l in result["logs"])

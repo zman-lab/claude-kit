@@ -88,6 +88,28 @@ def create_router(prefix: str = "/sysmon", token: Optional[str] = None) -> Any:
         result["metrics"] = collector.collect_all()
         return JSONResponse(result)
 
+    @router.get("/api/process-desc")
+    async def get_process_desc(request: Request) -> JSONResponse:
+        if not _check_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        from .collectors.base import _load_process_desc
+        return JSONResponse(_load_process_desc())
+
+    @router.post("/api/process-desc")
+    async def save_process_desc(request: Request) -> JSONResponse:
+        if not _check_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        try:
+            data = await request.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+        from .collectors.base import _save_process_desc
+        try:
+            _save_process_desc(data)
+        except OSError as exc:
+            return JSONResponse({"error": str(exc)}, status_code=500)
+        return JSONResponse({"ok": True})
+
     @router.get("/api/claude-config")
     async def claude_config(request: Request) -> JSONResponse:
         if not _check_token(request):

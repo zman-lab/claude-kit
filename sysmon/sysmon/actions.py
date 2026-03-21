@@ -1,10 +1,14 @@
 """액션 실행기 — MCP 종료, 캐시 퍼지 등."""
 import os
+import re
 import subprocess
 import time
 from typing import Any
 
 from .collectors.base import _SECURITY_PATTERNS
+
+# launchd 레이블 허용 패턴: 영문자, 숫자, 점, 밑줄, 하이픈만 허용
+_LABEL_PATTERN = re.compile(r'^[a-zA-Z0-9._-]+$')
 
 # launchd 보호 대상 레이블 (비활성화 거부)
 _PROTECTED_LAUNCHD_LABELS: frozenset[str] = frozenset({
@@ -279,6 +283,11 @@ class ActionRunner:
         # 1. 레이블 유효성 검사
         if not label:
             logs.append("레이블이 비어있습니다.")
+            return
+
+        # 1-1. 정규식 검증 (쉘 메타문자 인젝션 방지)
+        if not _LABEL_PATTERN.match(label):
+            logs.append(f"유효하지 않은 레이블 형식: {label!r}")
             return
 
         # 2. 보호 대상 레이블 거부
