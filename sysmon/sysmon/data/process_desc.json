@@ -1,7 +1,7 @@
 {
   "_meta": {
     "version": 1,
-    "updated_at": "2026-03-21T06:47:43"
+    "updated_at": "2026-03-21T06:53:13"
   },
   "categories": {
     "security": {
@@ -258,6 +258,564 @@
     },
     "OneDrive": {
       "stop_desc": "OneDrive 파일 동기화 — 끄면 동기화 중단"
+    },
+    "ARDAgent": {
+      "stop_desc": "원격 관리 에이전트"
+    },
+    "AirPlayXPCHelper": {
+      "stop_desc": "AirPlay 도우미"
+    },
+    "AppSSOAgent": {
+      "stop_desc": "앱 싱글사인온"
+    },
+    "AppSSODaemon": {
+      "stop_desc": "앱 싱글사인온 데몬"
+    },
+    "AppleCredentialManagerDaemon": {
+      "stop_desc": "Apple 자격 증명 관리"
+    },
+    "AssetCache": {
+      "stop_desc": "콘텐츠 캐싱 서비스"
+    },
+    "AssetCacheTetheratorService": {
+      "stop_desc": "콘텐츠 캐싱 테더링"
+    },
+    "AudioComponentRegistrar": {
+      "stop_desc": "오디오 컴포넌트 등록"
+    },
+    "BiomeAgent": {
+      "stop_desc": "macOS 사용 패턴 학습"
+    },
+    "CharacterPalette": {
+      "stop_desc": "특수문자 입력기"
+    },
+    "CommCenter": {
+      "stop_desc": "통신 서비스 (모뎀)"
+    },
+    "ContextService": {
+      "stop_desc": "macOS 컨텍스트 서비스"
+    },
+    "ContextStoreAgent": {
+      "stop_desc": "macOS 컨텍스트 저장소"
+    },
+    "ContinuityCaptureAgent": {
+      "stop_desc": "연속성 카메라 (iPhone→Mac)"
+    },
+    "CoreLocationAgent": {
+      "stop_desc": "위치 서비스 에이전트"
+    },
+    "CoreServicesUIAgent": {
+      "stop_desc": "macOS 코어 서비스 UI"
+    },
+    "GamePolicyAgent": {
+      "stop_desc": "게임 정책 에이전트"
+    },
+    "IntelligencePlatformComputeService": {
+      "stop_desc": "Apple Intelligence 연산"
+    },
+    "KIM_Extension": {
+      "stop_desc": "한국어 입력기"
+    },
+    "Keychain": {
+      "stop_desc": "키체인 알림"
+    },
+    "LinkedNotesUIService": {
+      "stop_desc": "메모 연결 서비스"
+    },
+    "MTLAssetUpgraderD": {
+      "stop_desc": "Metal GPU 에셋 업그레이드"
+    },
+    "MTLCompilerService": {
+      "stop_desc": "Metal GPU 셰이더 컴파일"
+    },
+    "ManagedSettingsAgent": {
+      "stop_desc": "스크린타임 설정 관리"
+    },
+    "PAH_Extension": {
+      "stop_desc": "길게 누르기 입력 (특수문자)"
+    },
+    "PerfPowerServices": {
+      "stop_desc": "성능/전력 관리"
+    },
+    "PowerChime": {
+      "stop_desc": "충전 효과음"
+    },
+    "PowerUIAgent": {
+      "stop_desc": "전원 UI 에이전트"
+    },
+    "ProtectedCloudKeySyncing": {
+      "stop_desc": "iCloud 키 동기화"
+    },
+    "QuickLookSatellite": {
+      "stop_desc": "훑어보기 렌더링"
+    },
+    "QuickLookUIService": {
+      "stop_desc": "훑어보기 UI"
+    },
+    "SSMenuAgent": {
+      "stop_desc": "원격 관리 메뉴"
+    },
+    "ScreenTimeAgent": {
+      "stop_desc": "스크린타임 에이전트"
+    },
+    "ScreenTimeWidgetExtension": {
+      "stop_desc": "스크린타임 위젯"
+    },
+    "SetStoreUpdateService": {
+      "stop_desc": "설정 저장소 업데이트"
+    },
+    "SoftwareUpdateNotificationManager": {
+      "stop_desc": "소프트웨어 업데이트 알림"
+    },
+    "TextInputMenuAgent": {
+      "stop_desc": "입력 소스 메뉴 (한/영)"
+    },
+    "TextInputSwitcher": {
+      "stop_desc": "입력 소스 전환 (한/영)"
+    },
+    "ThemeWidgetControlViewService": {
+      "stop_desc": "위젯 테마 서비스"
+    },
+    "TopHeroes": {
+      "stop_desc": "게임 앱"
+    },
+    "UIKitSystem": {
+      "stop_desc": "UIKit 시스템 서비스"
+    },
+    "UVCAssistant": {
+      "stop_desc": "USB 카메라 도우미"
+    },
+    "UsageTrackingAgent": {
+      "stop_desc": "앱 사용량 추적"
+    },
+    "UserEventAgent": {
+      "stop_desc": "사용자 이벤트 에이전트"
+    },
+    "ViewBridgeAuxiliary": {
+      "stop_desc": "UI 브릿지 서비스"
+    },
+    "WallpaperAgent": {
+      "stop_desc": "배경화면 관리"
+    },
+    "WallpaperImageExtension": {
+      "stop_desc": "배경화면 이미지"
+    },
+    "WiFiVelocityAgent": {
+      "stop_desc": "Wi-Fi 속도 모니터"
+    },
+    "WindowManager": {
+      "stop_desc": "윈도우 관리자 (Stage Manager)"
+    },
+    "WirelessRadioManagerd": {
+      "stop_desc": "무선 라디오 관리 (비행기모드)"
+    },
+    "Aerial": {
+      "stop_desc": "Aerial 스크린세이버"
+    },
+    "adprivacyd": {
+      "stop_desc": "광고 개인정보 데몬"
+    },
+    "akd": {
+      "stop_desc": "AuthKit 인증 데몬"
+    },
+    "amfid": {
+      "stop_desc": "앱 서명 검증"
+    },
+    "amsengagementd": {
+      "stop_desc": "App Store 참여도 데몬"
+    },
+    "analyticsd": {
+      "stop_desc": "macOS 분석 데몬"
+    },
+    "appinstalld": {
+      "stop_desc": "앱 설치 데몬"
+    },
+    "appstoreagent": {
+      "stop_desc": "App Store 에이전트"
+    },
+    "apsd": {
+      "stop_desc": "Apple Push 알림 — 끄면 알림 안 옴"
+    },
+    "assistant_service": {
+      "stop_desc": "Siri 어시스턴트 서비스"
+    },
+    "assistantd": {
+      "stop_desc": "Siri 어시스턴트 데몬"
+    },
+    "audioaccessoryd": {
+      "stop_desc": "오디오 악세서리 데몬"
+    },
+    "audioanalyticsd": {
+      "stop_desc": "오디오 분석 데몬"
+    },
+    "audiomxd": {
+      "stop_desc": "오디오 믹서 데몬"
+    },
+    "authd": {
+      "stop_desc": "인증 서비스 데몬"
+    },
+    "avconferenced": {
+      "stop_desc": "FaceTime/화상통화 데몬"
+    },
+    "axassetsd": {
+      "stop_desc": "접근성 에셋 데몬"
+    },
+    "biomed": {
+      "stop_desc": "사용 패턴 데이터 데몬"
+    },
+    "bird": {
+      "stop_desc": "iCloud Drive 동기화 — 끄면 동기화 중단"
+    },
+    "bluetoothuserd": {
+      "stop_desc": "블루투스 사용자 데몬"
+    },
+    "calaccessd": {
+      "stop_desc": "캘린더 접근 데몬"
+    },
+    "callservicesd": {
+      "stop_desc": "전화 서비스 데몬"
+    },
+    "cfprefsd": {
+      "stop_desc": "설정(Preferences) 데몬"
+    },
+    "chronod": {
+      "stop_desc": "위젯/Complications 데몬"
+    },
+    "cloudd": {
+      "stop_desc": "CloudKit 동기화 데몬"
+    },
+    "contactsd": {
+      "stop_desc": "연락처 데몬"
+    },
+    "containermanagerd": {
+      "stop_desc": "앱 컨테이너 관리"
+    },
+    "containermanagerd_system": {
+      "stop_desc": "시스템 컨테이너 관리"
+    },
+    "contentlinkingd": {
+      "stop_desc": "콘텐츠 연결 데몬"
+    },
+    "contextstored": {
+      "stop_desc": "컨텍스트 저장 데몬"
+    },
+    "coreautha": {
+      "stop_desc": "TouchID/생체인증"
+    },
+    "coreauthd": {
+      "stop_desc": "인증 프레임워크 데몬"
+    },
+    "coreduetd": {
+      "stop_desc": "앱 사용 예측 데몬"
+    },
+    "corekdld": {
+      "stop_desc": "커널 디버그 로깅"
+    },
+    "coreservicesd": {
+      "stop_desc": "코어 서비스 데몬"
+    },
+    "corespeechd": {
+      "stop_desc": "음성 인식 데몬"
+    },
+    "dasd": {
+      "stop_desc": "백그라운드 작업 스케줄러"
+    },
+    "dataaccessd": {
+      "stop_desc": "메일/캘린더 데이터 접근"
+    },
+    "deleted": {
+      "stop_desc": "캐시 정리 데몬"
+    },
+    "diagnostics_agent": {
+      "stop_desc": "진단 에이전트"
+    },
+    "dmd": {
+      "stop_desc": "디바이스 관리 데몬"
+    },
+    "donotdisturbd": {
+      "stop_desc": "방해금지 모드 데몬"
+    },
+    "extensionkitservice": {
+      "stop_desc": "앱 확장 서비스"
+    },
+    "fairplayd": {
+      "stop_desc": "DRM(디지털 저작권) 데몬"
+    },
+    "familycircled": {
+      "stop_desc": "가족 공유 데몬"
+    },
+    "filecoordinationd": {
+      "stop_desc": "파일 동기화 조정"
+    },
+    "fileproviderd": {
+      "stop_desc": "파일 제공자 (iCloud Drive)"
+    },
+    "followupd": {
+      "stop_desc": "설정 완료 안내 데몬"
+    },
+    "fontd": {
+      "stop_desc": "폰트 관리 데몬"
+    },
+    "fseventsd": {
+      "stop_desc": "파일 시스템 이벤트 — 끄면 Spotlight/Time Machine 중단"
+    },
+    "gamed": {
+      "stop_desc": "Game Center 데몬"
+    },
+    "gamepolicyd": {
+      "stop_desc": "게임 정책 데몬"
+    },
+    "geodMachServiceBridge": {
+      "stop_desc": "위치 서비스 브릿지"
+    },
+    "homed": {
+      "stop_desc": "HomeKit 데몬"
+    },
+    "iconservicesagent": {
+      "stop_desc": "아이콘 캐시 관리"
+    },
+    "idleassetsd": {
+      "stop_desc": "스크린세이버/잠금화면 에셋"
+    },
+    "imklaunchagent": {
+      "stop_desc": "입력기(IME) 런처"
+    },
+    "installcoordinationd": {
+      "stop_desc": "설치 조정 데몬"
+    },
+    "installd": {
+      "stop_desc": "패키지 설치 데몬"
+    },
+    "itunescloudd": {
+      "stop_desc": "iTunes 클라우드 동기화"
+    },
+    "knowledge-agent": {
+      "stop_desc": "Siri 지식 에이전트"
+    },
+    "launchservicesd": {
+      "stop_desc": "앱 실행 서비스"
+    },
+    "localizationswitcherd": {
+      "stop_desc": "언어 전환 데몬"
+    },
+    "logd": {
+      "stop_desc": "macOS 통합 로깅"
+    },
+    "lsd": {
+      "stop_desc": "LaunchServices 데몬"
+    },
+    "mds": {
+      "stop_desc": "Spotlight 인덱싱 — 끄면 검색 안 됨"
+    },
+    "mdworker_shared": {
+      "stop_desc": "Spotlight 인덱서 워커"
+    },
+    "mediaremoted": {
+      "stop_desc": "미디어 리모트 (재생 제어)"
+    },
+    "mobileassetd": {
+      "stop_desc": "시스템 에셋 다운로드"
+    },
+    "nbagent": {
+      "stop_desc": "알림판 에이전트"
+    },
+    "neagent": {
+      "stop_desc": "네트워크 확장 에이전트 (VPN)"
+    },
+    "networkserviceproxy": {
+      "stop_desc": "네트워크 서비스 프록시"
+    },
+    "nsattributedstringagent": {
+      "stop_desc": "텍스트 렌더링 서비스"
+    },
+    "nsurlsessiond": {
+      "stop_desc": "시스템 HTTP 다운로드"
+    },
+    "opendirectoryd": {
+      "stop_desc": "디렉토리 서비스 (LDAP/AD)"
+    },
+    "passd": {
+      "stop_desc": "Apple Wallet/패스 데몬"
+    },
+    "pboard": {
+      "stop_desc": "클립보드(페이스트보드) — 끄면 복붙 안 됨"
+    },
+    "pkd": {
+      "stop_desc": "플러그인킷 데몬"
+    },
+    "powerd": {
+      "stop_desc": "전원 관리 데몬"
+    },
+    "printtool": {
+      "stop_desc": "프린트 서비스"
+    },
+    "proactived": {
+      "stop_desc": "선제적 제안 데몬"
+    },
+    "promotedcontentd": {
+      "stop_desc": "광고 콘텐츠 데몬"
+    },
+    "replayd": {
+      "stop_desc": "macOS 리플레이 데몬"
+    },
+    "routined": {
+      "stop_desc": "위치 루틴 학습"
+    },
+    "rtcreportingd": {
+      "stop_desc": "실시간 통신 보고"
+    },
+    "runningboardd": {
+      "stop_desc": "프로세스 생명주기 관리"
+    },
+    "sandboxd": {
+      "stop_desc": "앱 샌드박스 데몬"
+    },
+    "searchpartyd": {
+      "stop_desc": "나의 찾기 데몬"
+    },
+    "searchpartyuseragent": {
+      "stop_desc": "나의 찾기 에이전트"
+    },
+    "secd": {
+      "stop_desc": "보안 서비스 데몬"
+    },
+    "secinitd": {
+      "stop_desc": "보안 초기화 데몬"
+    },
+    "securityd": {
+      "stop_desc": "macOS 보안 데몬"
+    },
+    "sharedfilelistd": {
+      "stop_desc": "최근 항목/공유 목록"
+    },
+    "siriactionsd": {
+      "stop_desc": "Siri 단축어 데몬"
+    },
+    "siriknowledged": {
+      "stop_desc": "Siri 지식 데몬"
+    },
+    "smd": {
+      "stop_desc": "서비스 관리 데몬"
+    },
+    "spindump": {
+      "stop_desc": "행 프로세스 진단"
+    },
+    "spindump_agent": {
+      "stop_desc": "행 진단 에이전트"
+    },
+    "storekitagent": {
+      "stop_desc": "StoreKit (인앱결제)"
+    },
+    "studentd": {
+      "stop_desc": "교실 앱 데몬"
+    },
+    "suggestd": {
+      "stop_desc": "Siri 제안 데몬"
+    },
+    "swcd": {
+      "stop_desc": "공유 웹 자격증명"
+    },
+    "symptomsd": {
+      "stop_desc": "네트워크 품질 진단"
+    },
+    "syncdefaultsd": {
+      "stop_desc": "설정 동기화 데몬"
+    },
+    "sysextd": {
+      "stop_desc": "시스템 확장 데몬"
+    },
+    "sysmond": {
+      "stop_desc": "macOS 시스템 모니터 (내장)"
+    },
+    "syspolicyd": {
+      "stop_desc": "시스템 보안 정책"
+    },
+    "system_installd": {
+      "stop_desc": "시스템 설치 데몬"
+    },
+    "systemstats": {
+      "stop_desc": "시스템 통계 수집"
+    },
+    "talagent": {
+      "stop_desc": "투명성/동의/제어 에이전트"
+    },
+    "tccd": {
+      "stop_desc": "앱 권한(카메라/마이크 등) 관리"
+    },
+    "tipsd": {
+      "stop_desc": "macOS 팁 데몬"
+    },
+    "triald": {
+      "stop_desc": "macOS 실험/A/B 테스트"
+    },
+    "triald_system": {
+      "stop_desc": "시스템 실험 데몬"
+    },
+    "trustd": {
+      "stop_desc": "인증서 신뢰 관리"
+    },
+    "useractivityd": {
+      "stop_desc": "Handoff 활동 데몬"
+    },
+    "usernoted": {
+      "stop_desc": "사용자 알림 데몬"
+    },
+    "usernotificationsd": {
+      "stop_desc": "사용자 알림 서비스"
+    },
+    "webprivacyd": {
+      "stop_desc": "웹 개인정보 보호"
+    },
+    "wifip2pd": {
+      "stop_desc": "Wi-Fi P2P (AirDrop)"
+    },
+    "wifivelocityd": {
+      "stop_desc": "Wi-Fi 속도 데몬"
+    },
+    "com.apple.AmbientDisplayAgent": {
+      "stop_desc": "주변 디스플레이 에이전트"
+    },
+    "com.apple.AppStoreDaemon.StorePrivilegedODRService": {
+      "stop_desc": "App Store 온디맨드 리소스"
+    },
+    "com.apple.MobileInstallationHelperService": {
+      "stop_desc": "앱 설치 도우미"
+    },
+    "com.apple.WebKit.GPU": {
+      "stop_desc": "WebKit GPU 가속 렌더링"
+    },
+    "com.apple.WebKit.Networking": {
+      "stop_desc": "WebKit 네트워크 처리"
+    },
+    "com.apple.WebKit.WebContent": {
+      "stop_desc": "WebKit 웹 콘텐츠 렌더링"
+    },
+    "com.apple.accessibility.mediaaccessibilityd": {
+      "stop_desc": "미디어 접근성 서비스"
+    },
+    "com.apple.appkit.xpc.openAndSavePanelService": {
+      "stop_desc": "파일 열기/저장 대화상자"
+    },
+    "com.apple.audio.SandboxHelper": {
+      "stop_desc": "오디오 샌드박스 도우미"
+    },
+    "com.apple.dock.external.extra.arm64": {
+      "stop_desc": "Dock 확장 서비스"
+    },
+    "com.apple.dock.extra": {
+      "stop_desc": "Dock 확장 서비스"
+    },
+    "com.apple.geod": {
+      "stop_desc": "macOS 위치/지도 서비스"
+    },
+    "com.apple.quicklook.ThumbnailsAgent": {
+      "stop_desc": "파일 미리보기 썸네일"
+    },
+    "metrics": {
+      "stop_desc": "sysmon 메트릭 수집 (자기 자신)"
+    },
+    "-zsh": {
+      "stop_desc": "Zsh 쉘 세션"
     }
   }
 }
