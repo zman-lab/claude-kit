@@ -1,7 +1,10 @@
 """액션 실행기 — MCP 종료, 캐시 퍼지 등."""
+import os
 import subprocess
 import time
 from typing import Any
+
+from .collectors.base import _SECURITY_PATTERNS
 
 
 # MCP 이름별 kill 패턴 (pkill -f에 전달)
@@ -65,6 +68,9 @@ class ActionRunner:
             self._kill_claude_single(pid, logs)
         elif action_id == "kill_all_zombies":
             self._kill_all_zombies(logs)
+        elif action_id.startswith("kill_process_"):
+            pid = action_id[len("kill_process_"):]
+            self._kill_process(pid, logs)
         else:
             logs.append(f"알 수 없는 액션: {action_id}")
 
@@ -193,6 +199,57 @@ class ActionRunner:
             logs.append(f"좀비 서브에이전트 {killed}개 종료 완료.")
         else:
             logs.append("종료할 좀비 없음.")
+
+    @staticmethod
+    def _kill_process(pid: str, logs: list[str]) -> None:
+        """일반 프로세스 종료 (보호 대상 거부, SIGTERM → SIGKILL 순서)."""
+        # 진입 로그
+        logs.append(f"[kill_process] PID={pid} 종료 요청 진입.")
+
+        # 1. PID 숫자 검증
+        if not pid.isdigit():
+            logs.append(f"PID '{pid}'은(는) 유효하지 않은 형식입니다.")
+            return
+
+        pid_int = int(pid)
+
+        # 2. PID 범위 검증 (PID ≤ 1은 시스템 프로세스)
+        if pid_int <= 1:
+            logs.append(f"PID {pid}은(는) 시스템 보호 대상입니다.")
+            return
+
+        # 3. sysmon 자기 자신 및 부모 프로세스 거부
+        if pid_int == os.getpid() or pid_int == os.getppid():
+            logs.append(f"PID {pid}은(는) 보호 대상 프로세스입니다. (sysmon 자신)")
+            return
+
+        # 4. 프로세스 존재 확인 + 커맨드 추출
+        cmd = _run(f"ps -p {pid} -o command= 2>/dev/null")
+        if not cmd:
+            logs.append(f"PID {pid} 프로세스를 찾을 수 없습니다.")
+            return
+
+        logs.append(f"[kill_process] PID={pid} cmd={cmd[:80]!r}")
+
+        # 5. security 패턴 포함 시 거부
+        cmd_lower = cmd.lower()
+        if any(pat.lower() in cmd_lower for pat in _SECURITY_PATTERNS):
+            logs.append(f"PID {pid}은(는) 보호 대상 프로세스입니다. (security)")
+            return
+
+        # 6. SIGTERM 시도
+        _run(f"kill -TERM {pid} 2>/dev/null")
+        time.sleep(0.5)
+        alive = _run(f"ps -p {pid} -o pid= 2>/dev/null").strip()
+
+        if not alive:
+            logs.append(f"PID {pid} 정상 종료 (SIGTERM).")
+            return
+
+        # 7. SIGKILL 강제 종료
+        logs.append(f"[kill_process] PID={pid} SIGTERM 후 생존 — SIGKILL 시도.")
+        _run(f"kill -KILL {pid} 2>/dev/null")
+        logs.append(f"PID {pid} 강제 종료 (SIGKILL).")
 
     @staticmethod
     def _purge_cache(logs: list[str], password: str) -> None:

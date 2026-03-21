@@ -75,6 +75,8 @@ class BaseCollector(ABC):
         docker = self.collect_docker()
         cats = self.categorize_processes(procs, mcp["pids"])
 
+        processes = _build_process_list(procs, mcp["pids"])
+
         data: dict[str, Any] = {
             "system": sys_info,
             "cpu": cpu,
@@ -85,6 +87,7 @@ class BaseCollector(ABC):
             "claude_sessions": claude_sessions,
             "docker": docker,
             "categories": cats,
+            "processes": processes,
             "collect_ms": round((time.time() - start) * 1000),
             "timestamp": time.strftime("%H:%M:%S KST"),
         }
@@ -910,3 +913,52 @@ def _categorize_common(
         for k, v in cats.items()
         if v["total_mb"] > 50
     }
+
+
+# sysmon 자신을 식별하기 위한 프로세스명 패턴
+_SYSMON_PROCESS_PATTERNS: list[str] = ["sysmon", "uvicorn", "gunicorn"]
+
+# security 카테고리 패턴 (kill 시 보호 대상 판별에 재사용)
+_SECURITY_PATTERNS: list[str] = [
+    pat for name, patterns in _CATEGORY_RULES if name == "security" for pat in patterns
+]
+
+
+def _classify_process(cmd: str) -> tuple[str, bool]:
+    """
+    프로세스 커맨드를 받아 (category, protected) 튜플 반환.
+
+    protected=True 조건: security 카테고리 OR sysmon 자기 자신.
+    """
+    for name, patterns in _CATEGORY_RULES:
+        if any(pt.lower() in cmd.lower() for pt in patterns):
+            is_protected = name == "security"
+            return name, is_protected
+    # sysmon 자기 자신 여부 확인
+    is_sysmon = any(pat in cmd.lower() for pat in _SYSMON_PROCESS_PATTERNS)
+    return "other", is_sysmon
+
+
+def _build_process_list(
+    procs: list[dict[str, Any]], mcp_pids: list[str]
+) -> list[dict[str, Any]]:
+    """
+    프로세스 목록에 category + protected 필드를 붙여 반환.
+
+    MCP 프로세스와 Claude 프로세스는 각자 탭(MCP/Claude Sessions)에서 관리하므로 제외.
+    """
+    mcp_set = set(mcp_pids)
+    result: list[dict[str, Any]] = []
+    for p in procs:
+        if p["pid"] in mcp_set or "claude" in p["cmd"].lower():
+            continue
+        category, protected = _classify_process(p["cmd"])
+        result.append({
+            "pid": p["pid"],
+            "ppid": p.get("ppid", ""),
+            "cmd": p["cmd"],
+            "rss_mb": p["rss_mb"],
+            "category": category,
+            "protected": protected,
+        })
+    return result

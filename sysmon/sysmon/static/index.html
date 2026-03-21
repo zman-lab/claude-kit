@@ -242,6 +242,7 @@ tr:last-child td{border-bottom:none}
   <div class="tab" onclick="tab('ma')">Memory Analysis</div>
   <div class="tab" onclick="tab('cs')">Claude Sessions</div>
   <div class="tab" onclick="tab('dk')">Docker</div>
+  <div class="tab" onclick="tab('pc')">Processes</div>
   <div class="tab" onclick="tab('cc')">Claude Config</div>
 </div>
 <div id="loading">수집 중...</div>
@@ -249,6 +250,7 @@ tr:last-child td{border-bottom:none}
 <div class="pane" id="p-ma"></div>
 <div class="pane" id="p-cs"></div>
 <div class="pane" id="p-dk"></div>
+<div class="pane" id="p-pc"></div>
 <div class="pane" id="p-cc"></div>
 
 <!-- Confirm + Execute dialog (single modal, state transitions) -->
@@ -301,7 +303,7 @@ tr:last-child td{border-bottom:none}
 let D=null, cpuHist=[], ramHist=[], MAX_HIST=60, pollTimer=null, pendingAction=null, fetching=false;
 let ccData=null, ccFilter={type:'',value:''}, ccSearch='';
 
-const TABS=['ov','ma','cs','dk','cc'];
+const TABS=['ov','ma','cs','dk','pc','cc'];
 function tab(id){
   const idx=TABS.indexOf(id);
   document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('on',i===idx));
@@ -648,6 +650,144 @@ function renderCS(){
   }
 
   document.getElementById('p-cs').innerHTML=h;
+}
+
+// ─── Render Processes ───
+// 카테고리 → 분류 라벨 (하드코딩 없이 서버 _CATEGORY_RULES와 1:1 대응)
+const PC_CATEGORY_LABEL = {
+  security: '보안',
+  chrome:   '브라우저',
+  docker:   '가상화',
+  warp:     '터미널',
+  ide:      'IDE',
+  system:   '시스템',
+  kakaotalk:'메신저',
+  other:    '기타',
+};
+// 카테고리 → 앱 설명 (끄면 어떻게 되는지)
+const PC_STOP_DESC = {
+  security: '회사 보안 — 끄면 안 됨',
+  chrome:   '끄면 브라우저 탭 닫힘',
+  docker:   '끄면 컨테이너 전부 중지',
+  warp:     '끄면 터미널 세션 종료',
+  ide:      '끄면 IDE 종료',
+  system:   'macOS 필수 — 끄지 말 것',
+  kakaotalk:'끄면 메신저 알림 중단',
+  other:    '영향 확인 필요',
+};
+// 특정 앱명 기준 설명 오버라이드 (카테고리 설명보다 우선)
+const PC_STOP_DESC_NAME = {
+  'Docker':          '끄면 컨테이너 전부 중지',
+  'Chrome':          '끄면 브라우저 탭 닫힘',
+  'Warp':            '끄면 터미널 세션 종료',
+  'Claude':          '끄면 AI 세션 종료',
+  'sysmon':          '이 모니터 자신 — 끄면 안 됨',
+  'java':            '끄면 IDE/서버 중지 가능',
+  'emulator':        '끄면 에뮬레이터 종료',
+  'qemu':            '끄면 Android 에뮬레이터 종료',
+};
+// cmd 경로 키워드 → 설명 (other 카테고리용)
+const PC_CMD_DESC = {
+  'node':         'Node.js 프로세스',
+  'java':         'Java 프로세스',
+  'python':       'Python 프로세스',
+  'ruby':         'Ruby 프로세스',
+  'nginx':        '웹서버',
+  'redis':        '캐시 서버',
+  'postgres':     'DB 서버',
+  'mysql':        'DB 서버',
+  'ssh':          'SSH 연결',
+  'Finder':       'macOS 파인더',
+  'Spotlight':    'macOS 검색',
+  'WindowServer': 'macOS 디스플레이',
+  'go':           'Go 프로세스',
+};
+function getCmdDesc(cmd){
+  if(!cmd) return null;
+  for(const [kw,desc] of Object.entries(PC_CMD_DESC)){
+    if(cmd.includes(kw)) return desc;
+  }
+  // 실행파일명 추출
+  const exe=(cmd.trim().split(/\s+/)[0].split('/').pop()||'').replace(/\0/g,'');
+  return exe ? exe+' 프로세스' : null;
+}
+function getStopDesc(g){
+  // 앱명 기준 오버라이드 우선
+  for(const [key,desc] of Object.entries(PC_STOP_DESC_NAME)){
+    if(g.name.toLowerCase().includes(key.toLowerCase())) return desc;
+  }
+  // 카테고리 설명 (other 제외)
+  if(g.category && g.category!=='other') return PC_STOP_DESC[g.category]||PC_STOP_DESC['other'];
+  // other 카테고리: cmd 기반 설명
+  const cmdDesc=getCmdDesc(g.cmd||'');
+  return cmdDesc||PC_STOP_DESC['other'];
+}
+function renderPC(){
+  if(!D||!D.processes) return;
+  const procs=D.processes;
+  let h='';
+
+  if(!procs.length){
+    h='<div style="text-align:center;padding:40px;color:var(--dim)">표시할 프로세스가 없습니다.</div>';
+    document.getElementById('p-pc').innerHTML=h;
+    return;
+  }
+
+  // 카테고리별 그룹핑: 'other'는 개별 표시, 나머지는 합산
+  const groups={};
+  procs.forEach(p=>{
+    const cat=p.category||'other';
+    if(cat==='other'){
+      // other는 cmd 마지막 경로 컴포넌트를 이름으로 개별 표시
+      const name=p.cmd.trim().split(/\s+/)[0].split('/').pop()||p.cmd;
+      const key='other::'+name+'::'+p.pid;
+      groups[key]={name,label:PC_CATEGORY_LABEL['other'],mem_mb:p.rss_mb,pids:[p.pid],protected:p.protected,category:'other',cmd:p.cmd||''};
+    } else {
+      if(!groups[cat]){
+        const name=PC_CATEGORY_LABEL[cat]?cat.charAt(0).toUpperCase()+cat.slice(1):cat;
+        groups[cat]={name,label:PC_CATEGORY_LABEL[cat]||cat,mem_mb:0,pids:[],protected:p.protected,category:cat};
+      }
+      groups[cat].mem_mb+=p.rss_mb;
+      groups[cat].pids.push(p.pid);
+    }
+  });
+
+  // 메모리 기준 내림차순 정렬
+  const rows=Object.values(groups).sort((a,b)=>b.mem_mb-a.mem_mb);
+
+  h+='<div class="card"><table>';
+  h+='<thead><tr><th style="width:48px">Stop</th><th style="width:60px;text-align:center">분류</th><th style="width:90px">메모리</th><th style="width:60px">PID</th><th>앱</th></tr></thead>';
+  h+='<tbody>';
+  rows.forEach(g=>{
+    const memStr=fmtMem(Math.round(g.mem_mb));
+    const pidCount=g.pids.length;
+    const pidDisplay=pidCount===1?String(g.pids[0]):pidCount+'개';
+    const stopDesc=getStopDesc(g);
+    // Stop 버튼: 단일 PID일 때만 액션 가능 (여러 PID는 개별 확인 불가)
+    let stopBtn;
+    if(g.protected){
+      stopBtn='<button class="btn-kill" disabled style="opacity:.4;cursor:not-allowed">Stop</button>';
+    } else if(pidCount===1){
+      const pid=g.pids[0];
+      stopBtn=`<button class="btn-kill" onclick="confirmAction('kill_process_${pid}','${g.name} 프로세스 종료','${g.name} 프로세스(PID ${pid})를 종료하시겠습니까?\\n메모리: ${memStr}')">Stop</button>`;
+    } else {
+      stopBtn=`<span style="font-size:10px;color:var(--dim)">—</span>`;
+    }
+    h+=`<tr>
+      <td>${stopBtn}</td>
+      <td style="text-align:center">
+        <span style="font-size:10px;background:var(--card2,rgba(255,255,255,.06));border-radius:4px;padding:2px 6px;color:var(--dim);white-space:nowrap">${g.label}</span>
+      </td>
+      <td style="color:${g.mem_mb>=500?'var(--red)':g.mem_mb>=200?'var(--orange)':'var(--text)'};font-weight:700">${memStr}</td>
+      <td style="font-size:11px;color:var(--dim);text-align:right;padding-right:8px">${pidDisplay}</td>
+      <td>
+        <div style="font-weight:600">${g.name}</div>
+        <div style="font-size:11px;color:#888;margin-top:2px">${stopDesc}</div>
+      </td>
+    </tr>`;
+  });
+  h+='</tbody></table></div>';
+  document.getElementById('p-pc').innerHTML=h;
 }
 
 // ─── Render Docker ───
@@ -1081,7 +1221,7 @@ async function fetchFull(){
   if(cpuHist.length>MAX_HIST) cpuHist.shift();
   if(ramHist.length>MAX_HIST) ramHist.shift();
   document.getElementById('loading').style.display='none';
-  renderOV(); renderMA(); renderCS(); renderDK();
+  renderOV(); renderMA(); renderCS(); renderDK(); renderPC();
 }
 
 // 5초 전체 갱신 (중복 방지)
@@ -1162,7 +1302,7 @@ async function execConfirmed(){
     D=data.metrics;
     cpuHist.push(Math.round(D.cpu.user+D.cpu.sys));
     ramHist.push(D.memory.pressure_pct);
-    renderOV(); renderMA(); renderCS(); renderDK();
+    renderOV(); renderMA(); renderCS(); renderDK(); renderPC();
   }catch(e){
     clearInterval(elapsedTimer);elapsedTimer=null;
     document.getElementById('c-title').textContent='실행 실패';
