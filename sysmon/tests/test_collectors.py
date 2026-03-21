@@ -1,5 +1,9 @@
 """collectors 모듈 테스트."""
+import io
 import platform
+import plistlib
+import tempfile
+import os
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -8,6 +12,7 @@ from sysmon.collectors import get_collector
 from sysmon.collectors.base import (
     _classify_process,
     _build_process_list,
+    _scan_launchd_services,
     _SECURITY_PATTERNS,
     _SYSMON_PROCESS_PATTERNS,
 )
@@ -315,3 +320,189 @@ class TestCollectAllProcesses:
             assert "claude" not in entry["cmd"].lower(), (
                 f"claude 프로세스가 포함됨: {entry['cmd']}"
             )
+
+    def test_collect_all_has_launchd_services_key(self):
+        """collect_all() 결과에 'launchd_services' 키가 있어야 한다."""
+        result = self.collector.collect_all()
+        assert "launchd_services" in result
+
+    def test_collect_all_launchd_services_is_list(self):
+        """collect_all()의 'launchd_services' 값은 리스트여야 한다."""
+        result = self.collector.collect_all()
+        assert isinstance(result["launchd_services"], list)
+
+    def test_collect_all_processes_have_launchd_fields(self):
+        """processes 항목에 launchd_label, launchd_disabled 필드가 있어야 한다."""
+        result = self.collector.collect_all()
+        for entry in result["processes"]:
+            assert "launchd_label" in entry, f"launchd_label 필드 누락: {entry}"
+            assert "launchd_disabled" in entry, f"launchd_disabled 필드 누락: {entry}"
+
+
+# ─── _scan_launchd_services 테스트 ───
+
+@pytest.mark.skipif(platform.system() != "Darwin", reason="macOS 전용 테스트")
+class TestScanLaunchdServices:
+    """base.py의 _scan_launchd_services() 함수 테스트."""
+
+    def _make_plist_bytes(self, label: str, program: str = "/usr/bin/app") -> bytes:
+        """테스트용 plist 바이트 생성."""
+        data = {"Label": label, "Program": program}
+        return plistlib.dumps(data)
+
+    def test_returns_list(self):
+        """정상 케이스: 리스트를 반환해야 한다."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 더미 plist 생성
+            plist_path = os.path.join(tmpdir, "com.test.myapp.plist")
+            with open(plist_path, "wb") as fh:
+                fh.write(self._make_plist_bytes("com.test.myapp"))
+
+            with patch("sysmon.collectors.base._run") as mock_run:
+                mock_run.return_value = ""  # launchctl list / print-disabled 빈 출력
+                with patch("os.path.expanduser", return_value=tmpdir):
+                    result = _scan_launchd_services()
+
+        assert isinstance(result, list)
+        assert len(result) == 1
+        entry = result[0]
+        assert entry["label"] == "com.test.myapp"
+        assert entry["program"] == "/usr/bin/app"
+        assert entry["running"] is False
+        assert entry["disabled"] is False
+
+    def test_running_service_detected(self):
+        """launchctl list에 PID가 있으면 running=True로 표시해야 한다."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plist_path = os.path.join(tmpdir, "com.test.running.plist")
+            with open(plist_path, "wb") as fh:
+                fh.write(self._make_plist_bytes("com.test.running"))
+
+            def mock_run(cmd: str, timeout: int = 10) -> str:
+                if "launchctl list" in cmd:
+                    return "1234\t0\tcom.test.running"
+                return ""
+
+            with patch("sysmon.collectors.base._run", side_effect=mock_run):
+                with patch("os.path.expanduser", return_value=tmpdir):
+                    result = _scan_launchd_services()
+
+        assert len(result) == 1
+        assert result[0]["running"] is True
+        assert result[0]["pid"] == "1234"
+
+    def test_disabled_service_detected(self):
+        """launchctl print-disabled에서 true로 표시된 서비스는 disabled=True여야 한다."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plist_path = os.path.join(tmpdir, "com.test.disabled.plist")
+            with open(plist_path, "wb") as fh:
+                fh.write(self._make_plist_bytes("com.test.disabled"))
+
+            def mock_run(cmd: str, timeout: int = 10) -> str:
+                if "print-disabled" in cmd:
+                    return '"com.test.disabled" => true'
+                return ""
+
+            with patch("sysmon.collectors.base._run", side_effect=mock_run):
+                with patch("os.path.expanduser", return_value=tmpdir):
+                    result = _scan_launchd_services()
+
+        assert len(result) == 1
+        assert result[0]["disabled"] is True
+
+    def test_plist_parse_failure_skipped(self):
+        """plist 파싱 실패 시 해당 항목을 스킵하고 다른 항목은 정상 처리해야 한다."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            # 유효한 plist
+            good_path = os.path.join(tmpdir, "com.test.good.plist")
+            with open(good_path, "wb") as fh:
+                fh.write(self._make_plist_bytes("com.test.good"))
+
+            # 깨진 plist (텍스트로 덮어씀)
+            bad_path = os.path.join(tmpdir, "com.test.bad.plist")
+            with open(bad_path, "w") as fh:
+                fh.write("this is not a valid plist !@#$")
+
+            with patch("sysmon.collectors.base._run", return_value=""):
+                with patch("os.path.expanduser", return_value=tmpdir):
+                    result = _scan_launchd_services()
+
+        labels = [s["label"] for s in result]
+        assert "com.test.good" in labels
+        assert "com.test.bad" not in labels
+
+    def test_no_label_in_plist_skipped(self):
+        """Label 키 없는 plist는 스킵해야 한다."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plist_path = os.path.join(tmpdir, "nolabel.plist")
+            with open(plist_path, "wb") as fh:
+                fh.write(plistlib.dumps({"Program": "/usr/bin/nolabel"}))
+
+            with patch("sysmon.collectors.base._run", return_value=""):
+                with patch("os.path.expanduser", return_value=tmpdir):
+                    result = _scan_launchd_services()
+
+        assert result == []
+
+    def test_program_from_program_arguments(self):
+        """Program 키 없이 ProgramArguments만 있는 경우 첫 번째 요소를 program으로 사용해야 한다."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            plist_path = os.path.join(tmpdir, "com.test.args.plist")
+            data = {
+                "Label": "com.test.args",
+                "ProgramArguments": ["/usr/local/bin/myapp", "--flag"],
+            }
+            with open(plist_path, "wb") as fh:
+                fh.write(plistlib.dumps(data))
+
+            with patch("sysmon.collectors.base._run", return_value=""):
+                with patch("os.path.expanduser", return_value=tmpdir):
+                    result = _scan_launchd_services()
+
+        assert len(result) == 1
+        assert result[0]["program"] == "/usr/local/bin/myapp"
+
+    def test_linux_returns_empty_list(self):
+        """Linux 환경에서는 빈 리스트를 반환해야 한다."""
+        with patch("platform.system", return_value="Linux"):
+            result = _scan_launchd_services()
+        assert result == []
+
+
+# ─── _build_process_list launchd 매핑 테스트 ───
+
+class TestBuildProcessListLaunchd:
+    """_build_process_list()의 launchd 매핑 기능 테스트."""
+
+    def _make_proc(self, pid: str, cmd: str, rss_mb: float) -> dict:
+        return {"pid": pid, "ppid": "1", "cmd": cmd, "rss_mb": rss_mb}
+
+    def test_launchd_fields_present_when_no_services(self):
+        """launchd_services가 없을 때도 launchd_label/launchd_disabled 필드가 있어야 한다."""
+        procs = [self._make_proc("100", "/usr/bin/app", 50.0)]
+        result = _build_process_list(procs, [])
+        assert "launchd_label" in result[0]
+        assert "launchd_disabled" in result[0]
+        assert result[0]["launchd_label"] == ""
+        assert result[0]["launchd_disabled"] is False
+
+    def test_launchd_pid_matched(self):
+        """launchd 서비스 PID가 프로세스 PID와 일치하면 launchd_label이 매핑되어야 한다."""
+        procs = [self._make_proc("200", "/usr/bin/myapp", 30.0)]
+        services = [
+            {"label": "com.test.myapp", "pid": "200", "running": True,
+             "disabled": False, "program": "/usr/bin/myapp", "plist_path": "/tmp/x.plist"}
+        ]
+        result = _build_process_list(procs, [], launchd_services=services)
+        assert result[0]["launchd_label"] == "com.test.myapp"
+        assert result[0]["launchd_disabled"] is False
+
+    def test_launchd_disabled_flag_propagated(self):
+        """launchd 서비스가 disabled=True이면 launchd_disabled=True로 매핑해야 한다."""
+        procs = [self._make_proc("300", "/usr/bin/disabledapp", 20.0)]
+        services = [
+            {"label": "com.test.disabled", "pid": "300", "running": True,
+             "disabled": True, "program": "/usr/bin/disabledapp", "plist_path": "/tmp/y.plist"}
+        ]
+        result = _build_process_list(procs, [], launchd_services=services)
+        assert result[0]["launchd_disabled"] is True

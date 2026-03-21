@@ -170,3 +170,90 @@ class TestKillProcess:
         assert "duration_ms" in result
         assert isinstance(result["duration_ms"], (int, float))
         assert result["duration_ms"] >= 0
+
+
+class TestLaunchdAction:
+    """launchd_disable_* / launchd_enable_* 액션 테스트."""
+
+    def test_disable_normal_label(self):
+        """일반 레이블을 disable하면 launchctl이 호출되고 로그에 완료 메시지가 있어야 한다."""
+        runner = ActionRunner()
+        label = "com.example.myapp"
+
+        with patch("sysmon.actions.subprocess.run") as mock_proc:
+            mock_proc.return_value.returncode = 0
+            mock_proc.return_value.stderr = ""
+            mock_proc.return_value.stdout = ""
+            result = runner.run(f"launchd_disable_{label}")
+
+        assert result["success"] is True
+        logs_text = "\n".join(result["logs"])
+        assert "비활성화" in logs_text
+        assert "재부팅" in logs_text
+        # launchctl disable 명령이 호출되었는지 확인
+        called_cmd = mock_proc.call_args[1].get("args") or mock_proc.call_args[0][0]
+        assert "disable" in called_cmd
+        assert label in called_cmd
+
+    def test_enable_normal_label(self):
+        """일반 레이블을 enable하면 launchctl이 호출되고 로그에 완료 메시지가 있어야 한다."""
+        runner = ActionRunner()
+        label = "com.example.myapp"
+
+        with patch("sysmon.actions.subprocess.run") as mock_proc:
+            mock_proc.return_value.returncode = 0
+            mock_proc.return_value.stderr = ""
+            mock_proc.return_value.stdout = ""
+            result = runner.run(f"launchd_enable_{label}")
+
+        assert result["success"] is True
+        logs_text = "\n".join(result["logs"])
+        assert "활성화" in logs_text
+        assert "재부팅" in logs_text
+        called_cmd = mock_proc.call_args[1].get("args") or mock_proc.call_args[0][0]
+        assert "enable" in called_cmd
+        assert label in called_cmd
+
+    def test_protected_label_rejected(self):
+        """보호 대상 레이블(com.claude-sysmon)은 변경을 거부해야 한다."""
+        runner = ActionRunner()
+        result = runner.run("launchd_disable_com.claude-sysmon")
+        logs_text = "\n".join(result["logs"])
+        assert "보호 대상" in logs_text
+
+    def test_security_pattern_label_rejected(self):
+        """security 패턴을 포함하는 레이블은 변경을 거부해야 한다."""
+        runner = ActionRunner()
+        # _SECURITY_PATTERNS에 "broadcom"이 있으므로 이를 포함한 레이블은 거부
+        result = runner.run("launchd_disable_com.broadcom.antivirus")
+        logs_text = "\n".join(result["logs"])
+        assert "보안 서비스" in logs_text
+
+    def test_empty_label_rejected(self):
+        """빈 레이블은 거부해야 한다."""
+        runner = ActionRunner()
+        result = runner.run("launchd_disable_")
+        logs_text = "\n".join(result["logs"])
+        assert "비어있습니다" in logs_text
+
+    def test_launchctl_failure_logged(self):
+        """launchctl 명령 실패 시 에러 메시지가 로그에 포함되어야 한다."""
+        runner = ActionRunner()
+        label = "com.example.myapp"
+
+        with patch("sysmon.actions.subprocess.run") as mock_proc:
+            mock_proc.return_value.returncode = 1
+            mock_proc.return_value.stderr = "No such process"
+            mock_proc.return_value.stdout = ""
+            result = runner.run(f"launchd_disable_{label}")
+
+        logs_text = "\n".join(result["logs"])
+        assert "실패" in logs_text
+
+    def test_result_has_duration_ms(self):
+        """결과에 duration_ms 필드가 있어야 한다."""
+        runner = ActionRunner()
+        result = runner.run("launchd_disable_")
+        assert "duration_ms" in result
+        assert isinstance(result["duration_ms"], (int, float))
+        assert result["duration_ms"] >= 0

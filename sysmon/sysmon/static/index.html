@@ -166,6 +166,15 @@ tr:last-child td{border-bottom:none}
 .btn-docker.logs{background:rgba(77,156,240,.12);color:var(--blue);border:1px solid rgba(77,156,240,.25)}
 .btn-docker.logs:hover{background:rgba(77,156,240,.22)}
 
+/* LaunchAgent 토글 버튼 */
+.btn-toggle-on{padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:.15s;background:#22c55e;color:#fff}
+.btn-toggle-on:hover{background:#16a34a}
+.btn-toggle-off{padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:.15s;background:#ef4444;color:#fff}
+.btn-toggle-off:hover{background:#dc2626}
+.launchd-section{margin-top:16px}
+.launchd-section-header{font-size:11px;color:var(--dim);padding:6px 0 4px;border-top:1px solid var(--border,rgba(255,255,255,.08));margin-bottom:4px}
+.launchd-inactive-row{opacity:.55}
+
 /* Claude Config */
 .cc-tree{max-height:65vh;overflow-y:auto}
 .cc-file{padding:8px 12px;border-radius:6px;cursor:pointer;transition:.1s}
@@ -653,74 +662,36 @@ function renderCS(){
 }
 
 // ─── Render Processes ───
-// 카테고리 → 분류 라벨 (하드코딩 없이 서버 _CATEGORY_RULES와 1:1 대응)
-const PC_CATEGORY_LABEL = {
-  security: '보안',
-  chrome:   '브라우저',
-  docker:   '가상화',
-  warp:     '터미널',
-  ide:      'IDE',
-  system:   '시스템',
-  kakaotalk:'메신저',
-  other:    '기타',
-};
-// 카테고리 → 앱 설명 (끄면 어떻게 되는지)
-const PC_STOP_DESC = {
-  security: '회사 보안 — 끄면 안 됨',
-  chrome:   '끄면 브라우저 탭 닫힘',
-  docker:   '끄면 컨테이너 전부 중지',
-  warp:     '끄면 터미널 세션 종료',
-  ide:      '끄면 IDE 종료',
-  system:   'macOS 필수 — 끄지 말 것',
-  kakaotalk:'끄면 메신저 알림 중단',
-  other:    '영향 확인 필요',
-};
-// 특정 앱명 기준 설명 오버라이드 (카테고리 설명보다 우선)
-const PC_STOP_DESC_NAME = {
-  'Docker':          '끄면 컨테이너 전부 중지',
-  'Chrome':          '끄면 브라우저 탭 닫힘',
-  'Warp':            '끄면 터미널 세션 종료',
-  'Claude':          '끄면 AI 세션 종료',
-  'sysmon':          '이 모니터 자신 — 끄면 안 됨',
-  'java':            '끄면 IDE/서버 중지 가능',
-  'emulator':        '끄면 에뮬레이터 종료',
-  'qemu':            '끄면 Android 에뮬레이터 종료',
-};
-// cmd 경로 키워드 → 설명 (other 카테고리용)
-const PC_CMD_DESC = {
-  'node':         'Node.js 프로세스',
-  'java':         'Java 프로세스',
-  'python':       'Python 프로세스',
-  'ruby':         'Ruby 프로세스',
-  'nginx':        '웹서버',
-  'redis':        '캐시 서버',
-  'postgres':     'DB 서버',
-  'mysql':        'DB 서버',
-  'ssh':          'SSH 연결',
-  'Finder':       'macOS 파인더',
-  'Spotlight':    'macOS 검색',
-  'WindowServer': 'macOS 디스플레이',
-  'go':           'Go 프로세스',
-};
-function getCmdDesc(cmd){
-  if(!cmd) return null;
-  for(const [kw,desc] of Object.entries(PC_CMD_DESC)){
-    if(cmd.includes(kw)) return desc;
-  }
-  // 실행파일명 추출
-  const exe=(cmd.trim().split(/\s+/)[0].split('/').pop()||'').replace(/\0/g,'');
-  return exe ? exe+' 프로세스' : null;
-}
+// 프로세스 설명은 D.process_desc (서버에서 제공) 기반으로 동적 조회
 function getStopDesc(g){
-  // 앱명 기준 오버라이드 우선
-  for(const [key,desc] of Object.entries(PC_STOP_DESC_NAME)){
-    if(g.name.toLowerCase().includes(key.toLowerCase())) return desc;
+  const pd = D && D.process_desc ? D.process_desc : {};
+  // 1. by_name 키워드 매칭 (우선)
+  const byName = pd.by_name || {};
+  for(const [key, val] of Object.entries(byName)){
+    if(g.name.toLowerCase().includes(key.toLowerCase()))
+      return val.stop_desc || '';
   }
-  // 카테고리 설명 (other 제외)
-  if(g.category && g.category!=='other') return PC_STOP_DESC[g.category]||PC_STOP_DESC['other'];
-  // other 카테고리: cmd 기반 설명
-  const cmdDesc=getCmdDesc(g.cmd||'');
-  return cmdDesc||PC_STOP_DESC['other'];
+  // 2. 카테고리 설명 (other 제외)
+  const byCat = pd.categories || {};
+  if(g.category && g.category !== 'other' && byCat[g.category])
+    return byCat[g.category].stop_desc || '';
+  // 3. cmd 키워드 (other 카테고리)
+  const byCmd = pd.by_cmd || {};
+  if(g.cmd){
+    for(const [kw, val] of Object.entries(byCmd)){
+      if(g.cmd.includes(kw)) return val.stop_desc || '';
+    }
+    // 4. cmd에서 실행파일명 추출
+    const parts = g.cmd.trim().split(/\s+/)[0].split('/');
+    const exe = (parts[parts.length - 1] || '').replace(/\0/g, '');
+    if(exe) return exe + ' 프로세스';
+  }
+  return '';
+}
+function getCatLabel(cat){
+  const pd = D && D.process_desc ? D.process_desc : {};
+  const cats = pd.categories || {};
+  return cats[cat] ? cats[cat].label : cat;
 }
 function renderPC(){
   if(!D||!D.processes) return;
@@ -741,11 +712,12 @@ function renderPC(){
       // other는 cmd 마지막 경로 컴포넌트를 이름으로 개별 표시
       const name=p.cmd.trim().split(/\s+/)[0].split('/').pop()||p.cmd;
       const key='other::'+name+'::'+p.pid;
-      groups[key]={name,label:PC_CATEGORY_LABEL['other'],mem_mb:p.rss_mb,pids:[p.pid],protected:p.protected,category:'other',cmd:p.cmd||''};
+      groups[key]={name,label:getCatLabel('other'),mem_mb:p.rss_mb,pids:[p.pid],protected:p.protected,category:'other',cmd:p.cmd||''};
     } else {
       if(!groups[cat]){
-        const name=PC_CATEGORY_LABEL[cat]?cat.charAt(0).toUpperCase()+cat.slice(1):cat;
-        groups[cat]={name,label:PC_CATEGORY_LABEL[cat]||cat,mem_mb:0,pids:[],protected:p.protected,category:cat};
+        const catLabel=getCatLabel(cat);
+        const name=catLabel!==cat?cat.charAt(0).toUpperCase()+cat.slice(1):cat;
+        groups[cat]={name,label:catLabel,mem_mb:0,pids:[],protected:p.protected,category:cat};
       }
       groups[cat].mem_mb+=p.rss_mb;
       groups[cat].pids.push(p.pid);
@@ -755,15 +727,28 @@ function renderPC(){
   // 메모리 기준 내림차순 정렬
   const rows=Object.values(groups).sort((a,b)=>b.mem_mb-a.mem_mb);
 
+  h+='<div style="display:flex;justify-content:flex-end;margin-bottom:6px">';
+  h+='<button class="btn" style="font-size:11px;padding:3px 10px" onclick="openProcDescEditor()">설명 편집</button>';
+  h+='</div>';
   h+='<div class="card"><table>';
-  h+='<thead><tr><th style="width:48px">Stop</th><th style="width:60px;text-align:center">분류</th><th style="width:90px">메모리</th><th style="width:60px">PID</th><th>앱</th></tr></thead>';
+  h+='<thead><tr><th style="width:48px">Stop</th><th style="width:72px;text-align:center">자동시작</th><th style="width:60px;text-align:center">분류</th><th style="width:90px">메모리</th><th style="width:60px">PID</th><th>앱</th></tr></thead>';
   h+='<tbody>';
+
+  // PID → launchd 서비스 매핑 (단일 PID 그룹에서 사용)
+  const launchdPidMap={};
+  if(D.processes){
+    D.processes.forEach(p=>{
+      if(p.launchd_label) launchdPidMap[String(p.pid)]={label:p.launchd_label,disabled:p.launchd_disabled};
+    });
+  }
+
   rows.forEach(g=>{
     const memStr=fmtMem(Math.round(g.mem_mb));
     const pidCount=g.pids.length;
     const pidDisplay=pidCount===1?String(g.pids[0]):pidCount+'개';
     const stopDesc=getStopDesc(g);
-    // Stop 버튼: 단일 PID일 때만 액션 가능 (여러 PID는 개별 확인 불가)
+
+    // Stop 버튼: 단일 PID일 때만 액션 가능
     let stopBtn;
     if(g.protected){
       stopBtn='<button class="btn-kill" disabled style="opacity:.4;cursor:not-allowed">Stop</button>';
@@ -771,10 +756,30 @@ function renderPC(){
       const pid=g.pids[0];
       stopBtn=`<button class="btn-kill" onclick="confirmAction('kill_process_${pid}','${g.name} 프로세스 종료','${g.name} 프로세스(PID ${pid})를 종료하시겠습니까?\\n메모리: ${memStr}')">Stop</button>`;
     } else {
-      stopBtn=`<span style="font-size:10px;color:var(--dim)">—</span>`;
+      // 다수 PID 그룹: 개별 행 토글 버튼으로 확장 가능
+      const grpId='grp-'+g.category+'-'+g.pids.join('_');
+      stopBtn=`<button class="btn-kill" style="font-size:10px;background:rgba(77,156,240,.1);color:var(--blue);border-color:rgba(77,156,240,.3)" onclick="toggleProcGroup('${grpId}')">${pidCount}개 ▾</button>`;
     }
+
+    // 자동시작 토글 버튼 (단일 PID이고 launchd 연결된 경우)
+    let autoStartBtn='<span style="font-size:10px;color:var(--dim)">—</span>';
+    if(pidCount===1){
+      const pid=String(g.pids[0]);
+      const svc=launchdPidMap[pid];
+      if(svc){
+        if(g.protected){
+          autoStartBtn='<span style="font-size:10px;color:var(--dim);background:rgba(255,255,255,.06);border-radius:4px;padding:2px 6px">보호</span>';
+        } else if(svc.disabled){
+          autoStartBtn=`<button class="btn-toggle-on" onclick="confirmAction('launchd_enable_${svc.label}','자동시작 활성화: ${svc.label}','${svc.label}의 자동시작을 활성화합니다.\\n재부팅 후 적용됩니다.')">활성화</button>`;
+        } else {
+          autoStartBtn=`<button class="btn-toggle-off" onclick="confirmAction('launchd_disable_${svc.label}','자동시작 비활성화: ${svc.label}','${svc.label}의 자동시작을 비활성화합니다.\\n재부팅 후 적용됩니다.')">비활성화</button>`;
+        }
+      }
+    }
+
     h+=`<tr>
       <td>${stopBtn}</td>
+      <td style="text-align:center">${autoStartBtn}</td>
       <td style="text-align:center">
         <span style="font-size:10px;background:var(--card2,rgba(255,255,255,.06));border-radius:4px;padding:2px 6px;color:var(--dim);white-space:nowrap">${g.label}</span>
       </td>
@@ -785,9 +790,171 @@ function renderPC(){
         <div style="font-size:11px;color:#888;margin-top:2px">${stopDesc}</div>
       </td>
     </tr>`;
+
+    // 다수 PID 그룹: 개별 프로세스 행 (접혀있음)
+    if(pidCount>1){
+      const grpId='grp-'+g.category+'-'+g.pids.join('_');
+      // 해당 그룹의 개별 프로세스 정보 조회
+      const grpProcs=(D.processes||[]).filter(p=>g.pids.includes(p.pid)&&p.category===g.category);
+      h+=`<tr id="${grpId}" style="display:none"><td colspan="6" style="padding:0 0 0 16px">`;
+      h+='<table style="width:100%;border-collapse:collapse">';
+      grpProcs.forEach(p=>{
+        const pMem=fmtMem(Math.round(p.rss_mb));
+        const indivStop=g.protected
+          ?'<button class="btn-kill" disabled style="opacity:.4;cursor:not-allowed;font-size:10px">Stop</button>'
+          :`<button class="btn-kill" onclick="confirmAction('kill_process_${p.pid}','프로세스 종료 (PID ${p.pid})','PID ${p.pid}을 종료하시겠습니까?\\n메모리: ${pMem}')" style="font-size:10px">Stop</button>`;
+        const pName=p.cmd.trim().split(/\s+/)[0].split('/').pop()||p.cmd;
+        h+=`<tr style="border-top:1px solid rgba(255,255,255,.04)">
+          <td style="width:48px;padding:4px 6px">${indivStop}</td>
+          <td style="width:72px"></td>
+          <td style="width:60px"></td>
+          <td style="width:90px;font-size:11px;color:var(--dim)">${pMem}</td>
+          <td style="width:60px;font-size:11px;color:var(--dim);text-align:right;padding-right:8px">${p.pid}</td>
+          <td style="font-size:11px;color:var(--text)">${pName}</td>
+        </tr>`;
+      });
+      h+='</table></td></tr>';
+    }
   });
-  h+='</tbody></table></div>';
+
+  h+='</tbody></table>';
+
+  // 미실행 LaunchAgent 섹션
+  const inactiveLaunchd=(D.launchd_services||[]).filter(s=>!s.running);
+  if(inactiveLaunchd.length>0){
+    h+='<div class="launchd-section">';
+    h+=`<div class="launchd-section-header">미실행 LaunchAgent (${inactiveLaunchd.length}개)</div>`;
+    h+='<table style="width:100%;border-collapse:collapse">';
+    h+='<thead><tr style="font-size:11px;color:var(--dim)"><th style="width:72px;text-align:center">자동시작</th><th>서비스</th></tr></thead>';
+    h+='<tbody>';
+    inactiveLaunchd.forEach(svc=>{
+      const toggleBtn=svc.disabled
+        ?`<button class="btn-toggle-on" onclick="confirmAction('launchd_enable_${svc.label}','자동시작 활성화: ${svc.label}','${svc.label}의 자동시작을 활성화합니다.\\n재부팅 후 적용됩니다.')">활성화</button>`
+        :`<button class="btn-toggle-off" onclick="confirmAction('launchd_disable_${svc.label}','자동시작 비활성화: ${svc.label}','${svc.label}의 자동시작을 비활성화합니다.\\n재부팅 후 적용됩니다.')">비활성화</button>`;
+      const progPath=svc.program?`<div style="font-size:10px;color:var(--dim);margin-top:1px">${svc.program}</div>`:'';
+      h+=`<tr class="launchd-inactive-row" style="border-top:1px solid rgba(255,255,255,.04)">
+        <td style="text-align:center;padding:5px 4px">${toggleBtn}</td>
+        <td style="padding:5px 4px">
+          <div style="font-size:12px;font-weight:500">${svc.label}</div>
+          ${progPath}
+        </td>
+      </tr>`;
+    });
+    h+='</tbody></table></div>';
+  }
+
+  h+='</div>';
   document.getElementById('p-pc').innerHTML=h;
+}
+
+function toggleProcGroup(grpId){
+  const el=document.getElementById(grpId);
+  if(!el) return;
+  el.style.display=(el.style.display==='none')?'table-row':'none';
+}
+
+// ─── Process Desc Editor ───
+function openProcDescEditor(){
+  const pd = (D && D.process_desc) ? JSON.parse(JSON.stringify(D.process_desc)) : {};
+  const cats = pd.categories || {};
+  const byName = pd.by_name || {};
+
+  let html = '<div id="pd-modal" style="position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:9000;display:flex;align-items:center;justify-content:center">';
+  html += '<div style="background:var(--card,#1e1e2e);border-radius:10px;padding:24px;width:min(600px,96vw);max-height:85vh;overflow-y:auto;position:relative">';
+  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">';
+  html += '<h3 style="margin:0;font-size:15px">프로세스 설명 편집</h3>';
+  html += '<button onclick="closeProcDescEditor()" style="background:none;border:none;color:var(--dim);font-size:18px;cursor:pointer">✕</button>';
+  html += '</div>';
+
+  html += '<h4 style="font-size:12px;color:var(--dim);margin:0 0 8px">카테고리 설명</h4>';
+  html += '<table style="width:100%;border-collapse:collapse;margin-bottom:16px">';
+  html += '<thead><tr style="font-size:11px;color:var(--dim)"><th style="text-align:left;padding:4px 8px">카테고리</th><th style="text-align:left;padding:4px 8px">라벨</th><th style="text-align:left;padding:4px 8px">설명 (끄면...)</th></tr></thead><tbody>';
+  for(const [key, val] of Object.entries(cats)){
+    html += `<tr>
+      <td style="padding:4px 8px;font-size:11px;color:var(--dim)">${key}</td>
+      <td style="padding:4px 8px"><input data-pd-cat-label="${key}" value="${(val.label||'').replace(/"/g,'&quot;')}" style="width:70px;background:var(--card2,rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:2px 6px;color:var(--text);font-size:12px"></td>
+      <td style="padding:4px 8px"><input data-pd-cat-desc="${key}" value="${(val.stop_desc||'').replace(/"/g,'&quot;')}" style="width:100%;background:var(--card2,rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:2px 6px;color:var(--text);font-size:12px"></td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+
+  html += '<h4 style="font-size:12px;color:var(--dim);margin:0 0 8px">앱명 오버라이드</h4>';
+  html += '<table style="width:100%;border-collapse:collapse;margin-bottom:8px">';
+  html += '<thead><tr style="font-size:11px;color:var(--dim)"><th style="text-align:left;padding:4px 8px">앱명 키워드</th><th style="text-align:left;padding:4px 8px">설명 (끄면...)</th><th style="width:32px"></th></tr></thead>';
+  html += '<tbody id="pd-byname-rows">';
+  for(const [key, val] of Object.entries(byName)){
+    html += _pdByNameRow(key, val.stop_desc||'');
+  }
+  html += '</tbody></table>';
+  html += '<button onclick="_pdAddByNameRow()" style="font-size:11px;padding:2px 10px;margin-bottom:16px" class="btn">+ 행 추가</button>';
+
+  html += '<div style="display:flex;gap:8px;justify-content:flex-end">';
+  html += '<button onclick="closeProcDescEditor()" style="font-size:12px;padding:5px 14px" class="btn">취소</button>';
+  html += '<button onclick="saveProcDesc()" style="font-size:12px;padding:5px 14px;background:var(--green,#50fa7b);color:#000;border:none;border-radius:6px;cursor:pointer;font-weight:700">저장</button>';
+  html += '</div>';
+  html += '</div></div>';
+
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function _pdByNameRow(key, desc){
+  const k = (key||'').replace(/"/g,'&quot;');
+  const d = (desc||'').replace(/"/g,'&quot;');
+  return `<tr class="pd-bn-row">
+    <td style="padding:4px 8px"><input class="pd-bn-key" value="${k}" placeholder="앱명 키워드" style="width:110px;background:var(--card2,rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:2px 6px;color:var(--text);font-size:12px"></td>
+    <td style="padding:4px 8px"><input class="pd-bn-val" value="${d}" placeholder="설명" style="width:100%;background:var(--card2,rgba(255,255,255,.06));border:1px solid rgba(255,255,255,.1);border-radius:4px;padding:2px 6px;color:var(--text);font-size:12px"></td>
+    <td style="padding:4px 8px"><button onclick="this.closest('tr').remove()" style="background:none;border:none;color:var(--red,#ff5555);cursor:pointer;font-size:14px">✕</button></td>
+  </tr>`;
+}
+
+function _pdAddByNameRow(){
+  document.getElementById('pd-byname-rows').insertAdjacentHTML('beforeend', _pdByNameRow('',''));
+}
+
+function closeProcDescEditor(){
+  const el = document.getElementById('pd-modal');
+  if(el) el.remove();
+}
+
+async function saveProcDesc(){
+  const pd = (D && D.process_desc) ? JSON.parse(JSON.stringify(D.process_desc)) : {};
+  // 카테고리 라벨/설명 수집
+  document.querySelectorAll('[data-pd-cat-label]').forEach(el=>{
+    const cat = el.dataset.pdCatLabel;
+    if(!pd.categories) pd.categories = {};
+    if(!pd.categories[cat]) pd.categories[cat] = {};
+    pd.categories[cat].label = el.value;
+  });
+  document.querySelectorAll('[data-pd-cat-desc]').forEach(el=>{
+    const cat = el.dataset.pdCatDesc;
+    if(!pd.categories) pd.categories = {};
+    if(!pd.categories[cat]) pd.categories[cat] = {};
+    pd.categories[cat].stop_desc = el.value;
+  });
+  // by_name 수집
+  const byName = {};
+  document.querySelectorAll('.pd-bn-row').forEach(row=>{
+    const key = row.querySelector('.pd-bn-key').value.trim();
+    const val = row.querySelector('.pd-bn-val').value.trim();
+    if(key) byName[key] = {stop_desc: val};
+  });
+  pd.by_name = byName;
+
+  try{
+    const res = await fetch('/api/process-desc', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify(pd),
+    });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
+    const json = await res.json();
+    if(!json.ok) throw new Error('서버 오류');
+    D.process_desc = pd;
+    closeProcDescEditor();
+    renderPC();
+  } catch(e){
+    alert('저장 실패: ' + e.message);
+  }
 }
 
 // ─── Render Docker ───

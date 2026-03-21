@@ -6,6 +6,11 @@ from typing import Any
 
 from .collectors.base import _SECURITY_PATTERNS
 
+# launchd 보호 대상 레이블 (비활성화 거부)
+_PROTECTED_LAUNCHD_LABELS: frozenset[str] = frozenset({
+    "com.claude-sysmon",
+})
+
 
 # MCP 이름별 kill 패턴 (pkill -f에 전달)
 MCP_KILL_PATTERNS: dict[str, list[str]] = {
@@ -71,6 +76,12 @@ class ActionRunner:
         elif action_id.startswith("kill_process_"):
             pid = action_id[len("kill_process_"):]
             self._kill_process(pid, logs)
+        elif action_id.startswith("launchd_disable_"):
+            label = action_id[len("launchd_disable_"):]
+            self._launchd_toggle(label, "disable", logs)
+        elif action_id.startswith("launchd_enable_"):
+            label = action_id[len("launchd_enable_"):]
+            self._launchd_toggle(label, "enable", logs)
         else:
             logs.append(f"알 수 없는 액션: {action_id}")
 
@@ -250,6 +261,64 @@ class ActionRunner:
         logs.append(f"[kill_process] PID={pid} SIGTERM 후 생존 — SIGKILL 시도.")
         _run(f"kill -KILL {pid} 2>/dev/null")
         logs.append(f"PID {pid} 강제 종료 (SIGKILL).")
+
+    @staticmethod
+    def _launchd_toggle(label: str, action: str, logs: list[str]) -> None:
+        """
+        LaunchAgent 활성화/비활성화.
+
+        Args:
+            label: LaunchAgent 레이블 (예: com.example.myapp)
+            action: "enable" 또는 "disable"
+            logs: 로그 리스트 (in-place 추가)
+
+        주의: 변경 사항은 재부팅 후 적용됩니다.
+        """
+        logs.append(f"[launchd_toggle] label={label!r} action={action!r} 진입.")
+
+        # 1. 레이블 유효성 검사
+        if not label:
+            logs.append("레이블이 비어있습니다.")
+            return
+
+        # 2. 보호 대상 레이블 거부
+        if label in _PROTECTED_LAUNCHD_LABELS:
+            logs.append(f"{label}은(는) 보호 대상 서비스입니다. 변경 불가.")
+            return
+
+        # 3. security 패턴 포함 여부 확인
+        label_lower = label.lower()
+        if any(pat.lower() in label_lower for pat in _SECURITY_PATTERNS):
+            logs.append(f"{label}은(는) 보안 서비스입니다. 변경 불가.")
+            return
+
+        # 4. action 유효성 검사
+        if action not in ("enable", "disable"):
+            logs.append(f"유효하지 않은 액션: {action!r}. 'enable' 또는 'disable'이어야 합니다.")
+            return
+
+        # 5. uid 조회
+        uid = str(os.getuid())
+        cmd = f"launchctl {action} gui/{uid}/{label}"
+        logs.append(f"[launchd_toggle] 실행: {cmd}")
+
+        try:
+            proc = subprocess.run(
+                cmd,
+                shell=True,
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            if proc.returncode == 0:
+                action_label = "비활성화" if action == "disable" else "활성화"
+                logs.append(f"{label} {action_label} 완료.")
+                logs.append("변경 사항은 재부팅 후 적용됩니다.")
+            else:
+                err = proc.stderr.strip() or proc.stdout.strip()
+                logs.append(f"launchctl {action} 실패: {err}")
+        except subprocess.TimeoutExpired:
+            logs.append(f"launchctl {action} 시간 초과 (10초).")
 
     @staticmethod
     def _purge_cache(logs: list[str], password: str) -> None:

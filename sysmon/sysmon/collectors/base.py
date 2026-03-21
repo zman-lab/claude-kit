@@ -1,6 +1,23 @@
 """수집기 추상 인터페이스."""
+import json
+import logging
+import os
 from abc import ABC, abstractmethod
+from datetime import datetime, timezone
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# ── process_desc 파일 경로 ──
+_DATA_DIR = os.getenv(
+    "SYSMON_DATA_DIR",
+    os.path.join(os.path.dirname(__file__), "..", "data"),
+)
+_PROCESS_DESC_PATH = os.path.join(_DATA_DIR, "process_desc.json")
+
+# 메모리 캐시 (5초 폴링마다 파일 읽기 방지)
+_process_desc_cache: dict[str, Any] | None = None
+_process_desc_mtime: float = 0.0
 
 
 class BaseCollector(ABC):
@@ -60,6 +77,7 @@ class BaseCollector(ABC):
 
     def collect_all(self) -> dict[str, Any]:
         """전체 메트릭 수집 + 인사이트 생성."""
+        import platform
         import time
         from ..analyzer import Analyzer
 
@@ -75,7 +93,11 @@ class BaseCollector(ABC):
         docker = self.collect_docker()
         cats = self.categorize_processes(procs, mcp["pids"])
 
-        processes = _build_process_list(procs, mcp["pids"])
+        # Darwin 전용: LaunchAgent 스캔
+        launchd: list[dict[str, Any]] = (
+            _scan_launchd_services() if platform.system() == "Darwin" else []
+        )
+        processes = _build_process_list(procs, mcp["pids"], launchd)
 
         data: dict[str, Any] = {
             "system": sys_info,
@@ -88,6 +110,8 @@ class BaseCollector(ABC):
             "docker": docker,
             "categories": cats,
             "processes": processes,
+            "launchd_services": launchd,
+            "process_desc": _load_process_desc(),
             "collect_ms": round((time.time() - start) * 1000),
             "timestamp": time.strftime("%H:%M:%S KST"),
         }
@@ -101,6 +125,98 @@ import os
 import re
 import subprocess
 import time
+
+
+# ── process_desc 헬퍼 ──
+
+def _build_default_process_desc() -> dict[str, Any]:
+    """코드 기반 기본 process_desc 반환. JSON 파일 없을 때 폴백."""
+    return {
+        "_meta": {"version": 1, "updated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")},
+        "categories": {
+            "security":   {"label": "보안",    "stop_desc": "회사 보안 — 끄면 안 됨"},
+            "chrome":     {"label": "브라우저", "stop_desc": "끄면 브라우저 탭 닫힘"},
+            "docker":     {"label": "가상화",  "stop_desc": "끄면 컨테이너 전부 중지"},
+            "warp":       {"label": "터미널",  "stop_desc": "끄면 터미널 세션 종료"},
+            "ide":        {"label": "IDE",     "stop_desc": "끄면 IDE 종료"},
+            "system":     {"label": "시스템",  "stop_desc": "macOS 필수 — 끄지 말 것"},
+            "kakaotalk":  {"label": "메신저",  "stop_desc": "끄면 메신저 알림 중단"},
+            "other":      {"label": "기타",    "stop_desc": ""},
+        },
+        "by_name": {
+            "Docker":   {"stop_desc": "끄면 컨테이너 전부 중지"},
+            "Chrome":   {"stop_desc": "끄면 브라우저 탭 닫힘"},
+            "Warp":     {"stop_desc": "끄면 터미널 세션 종료"},
+            "Claude":   {"stop_desc": "끄면 AI 세션 종료"},
+            "sysmon":   {"stop_desc": "이 모니터 자신 — 끄면 안 됨"},
+            "java":     {"stop_desc": "끄면 IDE/서버 중지 가능"},
+            "emulator": {"stop_desc": "끄면 에뮬레이터 종료"},
+            "qemu":     {"stop_desc": "끄면 Android 에뮬레이터 종료"},
+        },
+        "by_cmd": {
+            "node":         {"stop_desc": "Node.js 프로세스"},
+            "java":         {"stop_desc": "Java 프로세스"},
+            "python":       {"stop_desc": "Python 프로세스"},
+            "ruby":         {"stop_desc": "Ruby 프로세스"},
+            "nginx":        {"stop_desc": "웹서버"},
+            "redis":        {"stop_desc": "캐시 서버"},
+            "postgres":     {"stop_desc": "DB 서버"},
+            "mysql":        {"stop_desc": "DB 서버"},
+            "ssh":          {"stop_desc": "SSH 연결"},
+            "Finder":       {"stop_desc": "macOS 파인더"},
+            "Spotlight":    {"stop_desc": "macOS 검색"},
+            "WindowServer": {"stop_desc": "macOS 디스플레이"},
+            "go":           {"stop_desc": "Go 프로세스"},
+        },
+    }
+
+
+def _load_process_desc() -> dict[str, Any]:
+    """process_desc.json 로드 (mtime 캐시 적용). 파일 없으면 기본값 반환."""
+    global _process_desc_cache, _process_desc_mtime
+
+    try:
+        mtime = os.path.getmtime(_PROCESS_DESC_PATH)
+    except FileNotFoundError:
+        logger.debug("process_desc.json 없음 — 기본값 사용")
+        if _process_desc_cache is None:
+            _process_desc_cache = _build_default_process_desc()
+        return _process_desc_cache
+
+    if _process_desc_cache is not None and mtime == _process_desc_mtime:
+        return _process_desc_cache
+
+    try:
+        with open(_PROCESS_DESC_PATH, encoding="utf-8") as fh:
+            data = json.load(fh)
+        _process_desc_cache = data
+        _process_desc_mtime = mtime
+        logger.debug("process_desc.json 로드 완료")
+    except (json.JSONDecodeError, OSError) as exc:
+        logger.warning("process_desc.json 파싱 오류 (%s) — 기본값 사용", exc)
+        if _process_desc_cache is None:
+            _process_desc_cache = _build_default_process_desc()
+
+    return _process_desc_cache  # type: ignore[return-value]
+
+
+def _save_process_desc(data: dict[str, Any]) -> None:
+    """process_desc.json 저장 + 캐시 갱신 + _meta.updated_at 갱신."""
+    global _process_desc_cache, _process_desc_mtime
+
+    os.makedirs(_DATA_DIR, exist_ok=True)
+    data.setdefault("_meta", {})
+    data["_meta"]["updated_at"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+    try:
+        with open(_PROCESS_DESC_PATH, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=2)
+        _process_desc_mtime = os.path.getmtime(_PROCESS_DESC_PATH)
+        _process_desc_cache = data
+        logger.info("process_desc.json 저장 완료")
+    except OSError as exc:
+        logger.error("process_desc.json 저장 실패: %s", exc)
+        raise
 
 
 def _run(cmd: str, timeout: int = 10) -> str:
@@ -128,13 +244,15 @@ MCP_PATTERNS: dict[str, str] = {
 }
 
 # 프로세스 카테고리 분류 규칙
+# 주의: 위에서부터 순서대로 매칭 — 더 구체적인 규칙을 먼저 배치할 것
 _CATEGORY_RULES: list[tuple[str, list[str]]] = [
-    ("security", ["broadcom", "com.broadcom"]),
+    ("security", ["broadcom", "com.broadcom", "Privacy-i", "privacyi"]),
     ("chrome", ["Google Chrome", "chrome"]),
     ("docker", ["Virtualization.VirtualMachine", "com.docker"]),
     ("warp", ["Warp.app"]),
+    # CursorUIViewService는 macOS 시스템 서비스이므로 ide보다 먼저 매칭
+    ("system", ["mds_stores", "WindowServer", "Spotlight", "Finder", "CursorUIViewService"]),
     ("ide", ["JetBrains", "cursor", "Cursor"]),
-    ("system", ["mds_stores", "WindowServer", "Spotlight", "Finder"]),
     ("kakaotalk", ["KakaoTalk"]),
 ]
 
@@ -939,26 +1057,154 @@ def _classify_process(cmd: str) -> tuple[str, bool]:
     return "other", is_sysmon
 
 
+def _scan_launchd_services() -> list[dict[str, Any]]:
+    """
+    ~/Library/LaunchAgents/ 스캔하여 LaunchAgent 서비스 목록 반환.
+
+    Darwin 전용. Linux이면 빈 리스트 반환.
+
+    반환 형식:
+        [{label, plist_path, pid, running, disabled, program}]
+    """
+    import platform
+    import plistlib
+
+    if platform.system() != "Darwin":
+        return []
+
+    uid = str(os.getuid())
+    agents_dir = os.path.expanduser("~/Library/LaunchAgents")
+
+    if not os.path.isdir(agents_dir):
+        logger.debug("LaunchAgents 디렉토리 없음: %s", agents_dir)
+        return []
+
+    # launchctl list → PID 매핑 (실행 중인 서비스)
+    # 출력 형식: PID  Status  Label
+    pid_map: dict[str, str] = {}  # label → pid
+    list_out = _run("launchctl list 2>/dev/null")
+    for line in list_out.split("\n"):
+        parts = line.strip().split("\t")
+        if len(parts) >= 3:
+            pid_str, _status, label = parts[0], parts[1], parts[2]
+            # PID가 "-"이면 미실행
+            if pid_str != "-" and pid_str.isdigit():
+                pid_map[label] = pid_str
+
+    # launchctl print-disabled → disabled 상태
+    disabled_set: set[str] = set()
+    disabled_out = _run(f"launchctl print-disabled gui/{uid} 2>/dev/null")
+    for line in disabled_out.split("\n"):
+        line = line.strip()
+        # 형식: "label" => true/false
+        if "=>" in line:
+            parts = line.split("=>")
+            if len(parts) == 2:
+                label_part = parts[0].strip().strip('"')
+                state_part = parts[1].strip().lower()
+                if state_part == "true":
+                    disabled_set.add(label_part)
+
+    services: list[dict[str, Any]] = []
+    try:
+        plist_files = [
+            f for f in os.listdir(agents_dir)
+            if f.endswith(".plist")
+        ]
+    except OSError as exc:
+        logger.warning("LaunchAgents 디렉토리 읽기 실패: %s", exc)
+        return []
+
+    for fname in sorted(plist_files):
+        plist_path = os.path.join(agents_dir, fname)
+        try:
+            with open(plist_path, "rb") as fh:
+                plist_data = plistlib.load(fh)
+        except Exception as exc:
+            logger.debug("plist 파싱 스킵 (%s): %s", fname, exc)
+            continue
+
+        label: str = plist_data.get("Label", "")
+        if not label:
+            logger.debug("Label 없는 plist 스킵: %s", fname)
+            continue
+
+        # Program 또는 ProgramArguments[0]
+        program: str = plist_data.get("Program", "")
+        if not program:
+            prog_args = plist_data.get("ProgramArguments", [])
+            if prog_args:
+                program = str(prog_args[0])
+
+        pid = pid_map.get(label, "")
+        running = bool(pid)
+        disabled = label in disabled_set
+
+        services.append({
+            "label": label,
+            "plist_path": plist_path,
+            "pid": pid,
+            "running": running,
+            "disabled": disabled,
+            "program": program,
+        })
+        logger.debug(
+            "LaunchAgent 스캔: label=%s running=%s disabled=%s",
+            label, running, disabled,
+        )
+
+    logger.info("LaunchAgent 스캔 완료: %d개", len(services))
+    return services
+
+
 def _build_process_list(
-    procs: list[dict[str, Any]], mcp_pids: list[str]
+    procs: list[dict[str, Any]],
+    mcp_pids: list[str],
+    launchd_services: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     """
-    프로세스 목록에 category + protected 필드를 붙여 반환.
+    프로세스 목록에 category + protected + launchd 필드를 붙여 반환.
 
     MCP 프로세스와 Claude 프로세스는 각자 탭(MCP/Claude Sessions)에서 관리하므로 제외.
+
+    Args:
+        procs: collect_processes() 반환 목록
+        mcp_pids: MCP PID 목록 (제외 대상)
+        launchd_services: _scan_launchd_services() 반환값. None이면 launchd 필드 미포함.
     """
+    # PID → launchd 서비스 매핑
+    launchd_pid_map: dict[str, dict[str, Any]] = {}
+    if launchd_services:
+        for svc in launchd_services:
+            if svc["pid"]:
+                launchd_pid_map[svc["pid"]] = svc
+
     mcp_set = set(mcp_pids)
     result: list[dict[str, Any]] = []
     for p in procs:
         if p["pid"] in mcp_set or "claude" in p["cmd"].lower():
             continue
         category, protected = _classify_process(p["cmd"])
-        result.append({
+
+        entry: dict[str, Any] = {
             "pid": p["pid"],
             "ppid": p.get("ppid", ""),
             "cmd": p["cmd"],
             "rss_mb": p["rss_mb"],
             "category": category,
             "protected": protected,
-        })
+            "launchd_label": "",
+            "launchd_disabled": False,
+        }
+
+        # launchd 서비스와 PID 매칭
+        svc = launchd_pid_map.get(p["pid"])
+        if svc:
+            entry["launchd_label"] = svc["label"]
+            entry["launchd_disabled"] = svc["disabled"]
+            logger.debug(
+                "launchd 매핑: PID=%s label=%s", p["pid"], svc["label"]
+            )
+
+        result.append(entry)
     return result
