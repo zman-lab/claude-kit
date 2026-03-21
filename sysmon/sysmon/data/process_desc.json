@@ -1,0 +1,263 @@
+{
+  "_meta": {
+    "version": 1,
+    "updated_at": "2026-03-21T06:47:43"
+  },
+  "categories": {
+    "security": {
+      "label": "보안",
+      "stop_desc": "회사 보안 — 끄면 안 됨"
+    },
+    "chrome": {
+      "label": "브라우저",
+      "stop_desc": "끄면 브라우저 탭 닫힘"
+    },
+    "docker": {
+      "label": "가상화",
+      "stop_desc": "끄면 컨테이너 전부 중지"
+    },
+    "warp": {
+      "label": "터미널",
+      "stop_desc": "끄면 터미널 세션 종료"
+    },
+    "ide": {
+      "label": "IDE",
+      "stop_desc": "끄면 IDE 종료"
+    },
+    "system": {
+      "label": "시스템",
+      "stop_desc": "macOS 필수 — 끄지 말 것"
+    },
+    "kakaotalk": {
+      "label": "메신저",
+      "stop_desc": "끄면 메신저 알림 중단"
+    },
+    "other": {
+      "label": "기타",
+      "stop_desc": ""
+    }
+  },
+  "by_name": {
+    "Docker": {
+      "stop_desc": "끄면 컨테이너 전부 중지"
+    },
+    "Chrome": {
+      "stop_desc": "끄면 브라우저 탭 닫힘"
+    },
+    "Warp": {
+      "stop_desc": "끄면 터미널 세션 종료"
+    },
+    "Claude": {
+      "stop_desc": "끄면 AI 세션 종료"
+    },
+    "sysmon": {
+      "stop_desc": "이 모니터 자신 — 끄면 안 됨"
+    },
+    "java": {
+      "stop_desc": "끄면 IDE/서버 중지 가능"
+    },
+    "emulator": {
+      "stop_desc": "끄면 에뮬레이터 종료"
+    },
+    "qemu": {
+      "stop_desc": "끄면 Android 에뮬레이터 종료"
+    }
+  },
+  "by_cmd": {
+    "node": {
+      "stop_desc": "Node.js 프로세스"
+    },
+    "java": {
+      "stop_desc": "Java 프로세스"
+    },
+    "python": {
+      "stop_desc": "Python 프로세스"
+    },
+    "ruby": {
+      "stop_desc": "Ruby 프로세스"
+    },
+    "nginx": {
+      "stop_desc": "웹서버"
+    },
+    "redis": {
+      "stop_desc": "캐시 서버"
+    },
+    "postgres": {
+      "stop_desc": "DB 서버"
+    },
+    "mysql": {
+      "stop_desc": "DB 서버"
+    },
+    "ssh": {
+      "stop_desc": "SSH 연결"
+    },
+    "Finder": {
+      "stop_desc": "macOS 파일 관리자"
+    },
+    "Spotlight": {
+      "stop_desc": "macOS 검색 — 끄면 검색 안 됨"
+    },
+    "WindowServer": {
+      "stop_desc": "macOS 화면 출력 — 끄면 화면 꺼짐"
+    },
+    "go": {
+      "stop_desc": "Go 프로세스"
+    },
+    "ahnlab": {
+      "stop_desc": "AhnLab 보안 — 끄면 안 됨"
+    },
+    "epp": {
+      "stop_desc": "AhnLab 보안 에이전트 — 끄면 안 됨"
+    },
+    "EPPAgentHelper": {
+      "stop_desc": "AhnLab 보안 — 끄면 안 됨"
+    },
+    "Genians": {
+      "stop_desc": "지니안 NAC 보안 — 끄면 안 됨"
+    },
+    "GnDaemon": {
+      "stop_desc": "지니안 NAC 데몬 — 끄면 안 됨"
+    },
+    "GnPlugin": {
+      "stop_desc": "지니안 NAC 플러그인 — 끄면 안 됨"
+    },
+    "Symantec": {
+      "stop_desc": "시만텍 보안 — 끄면 안 됨"
+    },
+    "SymDaemon": {
+      "stop_desc": "시만텍 보안 데몬 — 끄면 안 됨"
+    },
+    "Ivanti": {
+      "stop_desc": "Ivanti VPN — 끄면 VPN 끊김"
+    },
+    "PulseSecure": {
+      "stop_desc": "VPN 클라이언트 — 끄면 VPN 끊김"
+    },
+    "PulseSetupClient": {
+      "stop_desc": "VPN 설정 — 끄면 VPN 재설정 필요"
+    },
+    "PICocoa": {
+      "stop_desc": "Privacy-i DLP — 끄면 안 됨"
+    },
+    "XProtect": {
+      "stop_desc": "macOS 악성코드 방어 — 끄면 안 됨"
+    },
+    "Dock": {
+      "stop_desc": "macOS Dock — 끄면 독 사라짐 (자동 재시작)"
+    },
+    "SystemUIServer": {
+      "stop_desc": "macOS 메뉴바 — 끄면 메뉴바 사라짐"
+    },
+    "loginwindow": {
+      "stop_desc": "macOS 로그인 — 끄면 강제 로그아웃"
+    },
+    "NotificationCenter": {
+      "stop_desc": "macOS 알림센터"
+    },
+    "ControlCenter": {
+      "stop_desc": "macOS 제어센터"
+    },
+    "Siri": {
+      "stop_desc": "macOS Siri 음성 도우미"
+    },
+    "coreaudiod": {
+      "stop_desc": "macOS 오디오 — 끄면 소리 안 남"
+    },
+    "bluetoothd": {
+      "stop_desc": "macOS 블루투스"
+    },
+    "WiFiAgent": {
+      "stop_desc": "macOS Wi-Fi 관리"
+    },
+    "locationd": {
+      "stop_desc": "macOS 위치 서비스"
+    },
+    "mDNSResponder": {
+      "stop_desc": "macOS DNS — 끄면 인터넷 안 됨"
+    },
+    "configd": {
+      "stop_desc": "macOS 네트워크 설정"
+    },
+    "launchd": {
+      "stop_desc": "macOS 프로세스 관리자 — 절대 끄면 안 됨"
+    },
+    "gamecontrollerd": {
+      "stop_desc": "macOS 게임 컨트롤러 서비스 — 게임패드 안 쓰면 무관"
+    },
+    "airportd": {
+      "stop_desc": "macOS Wi-Fi 데몬"
+    },
+    "AirPlayUIAgent": {
+      "stop_desc": "macOS AirPlay — 에어플레이 안 쓰면 무관"
+    },
+    "screencaptured": {
+      "stop_desc": "macOS 화면 캡처"
+    },
+    "rapportd": {
+      "stop_desc": "macOS 기기 간 연결(Handoff)"
+    },
+    "sharingd": {
+      "stop_desc": "macOS AirDrop/공유"
+    },
+    "identityservicesd": {
+      "stop_desc": "macOS iMessage/FaceTime"
+    },
+    "imagent": {
+      "stop_desc": "macOS iMessage 에이전트"
+    },
+    "photolibraryd": {
+      "stop_desc": "macOS 사진 라이브러리"
+    },
+    "accountsd": {
+      "stop_desc": "macOS 계정 관리"
+    },
+    "CalendarWidgetExtension": {
+      "stop_desc": "macOS 캘린더 위젯"
+    },
+    "WeatherWidget": {
+      "stop_desc": "macOS 날씨 위젯"
+    },
+    "StocksWidget": {
+      "stop_desc": "macOS 주식 위젯"
+    },
+    "adb": {
+      "stop_desc": "Android Debug Bridge — 끄면 안드로이드 디버깅 중단"
+    },
+    "qemu-system": {
+      "stop_desc": "QEMU 에뮬레이터 — 끄면 가상머신 종료"
+    },
+    "netsimd": {
+      "stop_desc": "Android 에뮬레이터 네트워크"
+    },
+    "esbuild": {
+      "stop_desc": "JavaScript 번들러"
+    },
+    "next-server": {
+      "stop_desc": "Next.js 개발 서버"
+    },
+    "vite": {
+      "stop_desc": "Vite 개발 서버"
+    },
+    "ngrok": {
+      "stop_desc": "ngrok 터널 — 끄면 외부 접속 끊김"
+    },
+    "gradle": {
+      "stop_desc": "Gradle 빌드 도구"
+    },
+    "gitstatusd": {
+      "stop_desc": "Git 상태 데몬 (p10k)"
+    },
+    "uvicorn": {
+      "stop_desc": "Python ASGI 서버"
+    },
+    "npm": {
+      "stop_desc": "Node.js 패키지 매니저"
+    },
+    "limactl": {
+      "stop_desc": "Lima 가상화 (Colima용)"
+    },
+    "OneDrive": {
+      "stop_desc": "OneDrive 파일 동기화 — 끄면 동기화 중단"
+    }
+  }
+}

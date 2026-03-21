@@ -246,7 +246,23 @@ MCP_PATTERNS: dict[str, str] = {
 # 프로세스 카테고리 분류 규칙
 # 주의: 위에서부터 순서대로 매칭 — 더 구체적인 규칙을 먼저 배치할 것
 _CATEGORY_RULES: list[tuple[str, list[str]]] = [
-    ("security", ["broadcom", "com.broadcom", "Privacy-i", "privacyi"]),
+    # 보안 소프트웨어 — 더 구체적인 규칙 먼저
+    ("security", [
+        # 기존
+        "broadcom", "com.broadcom", "Privacy-i", "privacyi",
+        # AhnLab
+        "ahnlab", "EPPAgent", "epcs", "epsvc",
+        # 지니안 NAC
+        "Genians", "GnDaemon", "GnPlugin",
+        # 시만텍
+        "Symantec", "SymDaemon", "SymSharedSettingsd",
+        # Ivanti VPN
+        "Ivanti", "PulseSecure", "PulseSetupClient", "dsAccessService", "PulseOpswat",
+        # macOS 내장 보안
+        "XProtect", "XprotectService",
+        # Privacy-i DLP
+        "PICocoa",
+    ]),
     ("chrome", ["Google Chrome", "chrome"]),
     ("docker", ["Virtualization.VirtualMachine", "com.docker"]),
     ("warp", ["Warp.app"]),

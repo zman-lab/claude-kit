@@ -754,7 +754,8 @@ function renderPC(){
       stopBtn='<button class="btn-kill" disabled style="opacity:.4;cursor:not-allowed">Stop</button>';
     } else if(pidCount===1){
       const pid=g.pids[0];
-      stopBtn=`<button class="btn-kill" onclick="confirmAction('kill_process_${pid}','${g.name} 프로세스 종료','${g.name} 프로세스(PID ${pid})를 종료하시겠습니까?\\n메모리: ${memStr}')">Stop</button>`;
+      const stopMsgBody=stopDesc?`이 프로세스를 종료하면: ${stopDesc}\\n\\n계속하시겠습니까?`:`프로세스(PID ${pid})를 종료하시겠습니까?\\n메모리: ${memStr}`;
+      stopBtn=`<button class="btn-kill" onclick="confirmAction('kill_process_${pid}','${g.name} 프로세스를 종료하시겠습니까?','${stopMsgBody}')">Stop</button>`;
     } else {
       // 다수 PID 그룹: 개별 행 토글 버튼으로 확장 가능
       const grpId='grp-'+g.category+'-'+g.pids.join('_');
@@ -1469,6 +1470,15 @@ async function execConfirmed(){
     D=data.metrics;
     cpuHist.push(Math.round(D.cpu.user+D.cpu.sys));
     ramHist.push(D.memory.pressure_pct);
+    // Optimistic update: launchd 토글은 서버 메트릭 반영 후 UI 강제 수정
+    // launchctl print-disabled 결과가 launchctl enable/disable 직후에 아직 미반영일 수 있음
+    if(id.startsWith('launchd_disable_')||id.startsWith('launchd_enable_')){
+      const toggleLabel=id.startsWith('launchd_disable_')?id.slice('launchd_disable_'.length):id.slice('launchd_enable_'.length);
+      const nowDisabled=id.startsWith('launchd_disable_');
+      if(D&&D.processes){
+        D.processes.forEach(p=>{if(p.launchd_label===toggleLabel){p.launchd_disabled=nowDisabled;}});
+      }
+    }
     renderOV(); renderMA(); renderCS(); renderDK(); renderPC();
   }catch(e){
     clearInterval(elapsedTimer);elapsedTimer=null;
