@@ -123,6 +123,7 @@ class BaseCollector(ABC):
 
 import os
 import re
+import shutil
 import subprocess
 import time
 
@@ -964,6 +965,50 @@ def _read_claude_file(path: str) -> dict[str, Any]:
         return {"path": path, "content": content, "size": len(content)}
     except Exception as e:
         return {"error": str(e), "path": path}
+
+
+def _write_claude_file(path: str, content: str) -> dict[str, Any]:
+    """Claude 관련 파일 내용 저장 (보안: _read_claude_file 과 동일 허용 경로).
+
+    - realpath 로 심링크를 실체 경로로 풀어 저장한다. `~/.claude/...` 를 고치면
+      `~/.claude-2nd|3rd|4th|5th` 이 같은 실체를 가리키므로 함께 반영된다.
+    - 덮어쓰기 전 `.bak-YYYYmmdd-HHMMSS` 백업을 남긴다.
+    - 신규 생성은 하지 않는다 (기존 파일 편집 전용).
+    """
+    real = os.path.realpath(path)
+    home = os.path.expanduser("~")
+    allowed_prefixes = [
+        os.path.join(home, ".claude"),
+        os.path.join(home, "zman-lab"),
+        os.path.join(home, "work"),
+        os.path.join(home, "dev-airlock"),
+        os.path.join(home, "init"),
+    ]
+    if not any(real.startswith(p) for p in allowed_prefixes):
+        return {"error": "접근 불가 경로", "path": real}
+    if not os.path.isfile(real):
+        return {"error": "파일 없음 (신규 생성 불가)", "path": real}
+    if len(content) > 500_000:
+        return {"error": "500KB 초과", "path": real}
+    try:
+        stamp = time.strftime("%Y%m%d-%H%M%S")
+        backup = f"{real}.bak-{stamp}"
+        shutil.copy2(real, backup)
+        # 같은 디렉토리에 임시 파일로 쓴 뒤 교체 (부분 저장 방지).
+        # 심링크 자체를 갈아끼우지 않도록 realpath 를 대상으로 한다.
+        tmp = f"{real}.tmp-{stamp}"
+        with open(tmp, "w", encoding="utf-8") as f:
+            f.write(content)
+        os.replace(tmp, real)
+        return {
+            "ok": True,
+            "path": real,
+            "requested": path,
+            "size": len(content),
+            "backup": backup,
+        }
+    except Exception as e:
+        return {"error": str(e), "path": real}
 
 
 def _analyze_dependencies(path: str) -> dict[str, Any]:

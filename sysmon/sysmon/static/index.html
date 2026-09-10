@@ -1214,7 +1214,16 @@ body{font-family:-apple-system,'SF Pro Display',sans-serif;background:var(--bg);
 .btn{padding:5px 12px;border:1px solid var(--border);border-radius:5px;background:var(--card);color:var(--text);cursor:pointer;font-size:11px}
 .btn:hover{background:#1e2231;border-color:var(--blue)}
 .btn.copy{background:rgba(61,214,140,.1);color:var(--green);border-color:rgba(61,214,140,.3)}
+.btn.edit{background:rgba(77,156,240,.1);color:var(--blue);border-color:rgba(77,156,240,.3)}
+.btn.save{background:rgba(255,183,77,.12);color:#ffb74d;border-color:rgba(255,183,77,.35)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
 .content{padding:20px 24px;max-width:900px}
+#editor{display:none;width:100%;height:calc(100vh - 46px);border:none;outline:none;resize:none;
+  background:#11131b;color:var(--text);padding:16px 20px;
+  font-family:'SF Mono',Menlo,monospace;font-size:12px;line-height:1.65;tab-size:2}
+body.editing .content{display:none}
+body.editing #editor{display:block}
+.hint{font-size:10px;color:var(--dim);margin-right:4px}
 h1{font-size:20px;font-weight:700;margin:18px 0 8px;border-bottom:1px solid var(--border);padding-bottom:6px}
 h2{font-size:16px;font-weight:700;margin:16px 0 6px}
 h3{font-size:14px;font-weight:600;margin:12px 0 4px}
@@ -1233,18 +1242,81 @@ hr{border:none;border-top:1px solid var(--border);margin:12px 0}
 <div class="toolbar">
   <h2>${escHtml(name)}</h2>
   <span class="path">${escHtml(path)}</span>
+  <span class="hint" id="hint"></span>
   <button class="btn copy" id="copy-btn" onclick="copyAll()">Copy</button>
-  <button class="btn" onclick="window.close()">닫기</button>
+  <button class="btn edit" id="edit-btn" onclick="toggleEdit()">편집</button>
+  <button class="btn save" id="save-btn" onclick="saveAll()" style="display:none">저장</button>
+  <button class="btn" id="close-btn" onclick="tryClose()">닫기</button>
 </div>
 <div class="content">${rendered}</div>
+<textarea id="editor" spellcheck="false"></textarea>
 <script>
 const RAW=${JSON.stringify(content)};
+const FPATH=${JSON.stringify(path)};
+let editing=false, saving=false;
+
 async function copyAll(){
-  try{await navigator.clipboard.writeText(RAW);
+  const src=editing?document.getElementById('editor').value:RAW;
+  try{await navigator.clipboard.writeText(src);
     document.getElementById('copy-btn').textContent='Copied!';
     setTimeout(()=>{document.getElementById('copy-btn').textContent='Copy'},1500);
   }catch(e){alert('Copy failed: '+e.message)}
 }
+
+function toggleEdit(){
+  const ta=document.getElementById('editor');
+  if(!editing){
+    ta.value=RAW; editing=true;
+    document.body.classList.add('editing');
+    document.getElementById('edit-btn').textContent='보기';
+    document.getElementById('save-btn').style.display='';
+    document.getElementById('hint').textContent='⌘S 저장 · Esc 취소';
+    ta.focus();
+  }else{
+    if(ta.value!==RAW && !confirm('편집 내용을 버리고 보기로 돌아갈까요?'))return;
+    editing=false;
+    document.body.classList.remove('editing');
+    document.getElementById('edit-btn').textContent='편집';
+    document.getElementById('save-btn').style.display='none';
+    document.getElementById('hint').textContent='';
+  }
+}
+
+async function saveAll(){
+  if(saving)return;
+  const ta=document.getElementById('editor');
+  if(ta.value===RAW){alert('변경된 내용이 없습니다.');return}
+  saving=true;
+  const btn=document.getElementById('save-btn');
+  btn.disabled=true; btn.textContent='저장 중…';
+  try{
+    const r=await fetch('/api/claude-file',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({path:FPATH,content:ta.value})});
+    const d=await r.json();
+    if(!r.ok||d.error){throw new Error(d.error||('HTTP '+r.status))}
+    if(window.opener&&!window.opener.closed){try{window.opener.scanClaudeConfig&&window.opener.scanClaudeConfig()}catch(e){}}
+    window.close();
+  }catch(e){
+    alert('저장 실패: '+e.message);
+    btn.disabled=false; btn.textContent='저장'; saving=false;
+  }
+}
+
+function tryClose(){
+  const ta=document.getElementById('editor');
+  if(editing && ta.value!==RAW && !confirm('저장하지 않은 편집 내용이 있습니다. 닫을까요?'))return;
+  window.close();
+}
+
+document.addEventListener('keydown',e=>{
+  if((e.metaKey||e.ctrlKey)&&e.key==='s'){e.preventDefault(); if(editing)saveAll(); return}
+  if(e.key==='Escape'&&editing){e.preventDefault(); toggleEdit()}
+});
+window.addEventListener('beforeunload',e=>{
+  const ta=document.getElementById('editor');
+  if(editing&&!saving&&ta.value!==RAW){e.preventDefault(); e.returnValue=''}
+});
 <\/script></body></html>`);
     w.document.close();
   }catch(e){alert('로드 실패: '+e.message)}

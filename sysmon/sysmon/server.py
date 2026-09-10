@@ -137,6 +137,22 @@ def _make_handler(
                     self.send_error(500, "Save failed")
                     return
                 self._json_response({"ok": True})
+            elif path == "/api/claude-file":
+                content_length = int(self.headers.get("Content-Length", 0))
+                if content_length <= 0:
+                    self.send_error(400, "Body required")
+                    return
+                try:
+                    data = json.loads(self.rfile.read(content_length))
+                except (json.JSONDecodeError, ValueError):
+                    self.send_error(400, "Invalid JSON")
+                    return
+                fpath = data.get("path", "")
+                if not fpath or "content" not in data:
+                    self.send_error(400, "path and content required")
+                    return
+                from .collectors.base import _write_claude_file
+                self._json_response(_write_claude_file(fpath, data["content"]))
             elif path.startswith("/api/action/"):
                 action_id = path.split("/api/action/")[1]
                 # JSON body 파싱

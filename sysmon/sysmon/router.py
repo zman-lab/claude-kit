@@ -127,6 +127,20 @@ def create_router(prefix: str = "/sysmon", token: Optional[str] = None) -> Any:
         from .collectors.base import _read_claude_file
         return JSONResponse(_read_claude_file(fpath))
 
+    @router.post("/api/claude-file")
+    async def claude_file_save(request: Request) -> JSONResponse:
+        if not _check_token(request):
+            return JSONResponse({"error": "Unauthorized"}, status_code=401)
+        try:
+            data = await request.json()
+        except Exception:
+            return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+        fpath = data.get("path", "")
+        if not fpath or "content" not in data:
+            return JSONResponse({"error": "path and content required"}, status_code=400)
+        from .collectors.base import _write_claude_file
+        return JSONResponse(_write_claude_file(fpath, data["content"]))
+
     @router.get("/api/claude-deps")
     async def claude_deps(request: Request) -> JSONResponse:
         if not _check_token(request):
