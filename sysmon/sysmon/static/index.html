@@ -140,6 +140,16 @@ tr:last-child td{border-bottom:none}
 .btn-kill:hover{background:rgba(240,78,83,.22)}
 .btn-kill-all{padding:6px 14px;border-radius:6px;font-size:11px;font-weight:600;border:none;cursor:pointer;transition:.15s;background:rgba(240,78,83,.15);color:var(--red);border:1px solid rgba(240,78,83,.3)}
 .btn-kill-all:hover{background:rgba(240,78,83,.25)}
+
+/* CPU 정리 버튼 — 배경을 꽉 채우고 글씨는 대비색(흰/검정)으로 둔다.
+   반투명 배경 + 동일계열 글씨(btn-kill 계열)는 대비가 낮아 잘 안 보인다는 지적 반영 (2026-09-11). */
+.btn-sweep{padding:9px 18px;border-radius:6px;font-size:14px;font-weight:700;border:none;cursor:pointer;transition:.15s;letter-spacing:-.2px}
+.btn-sweep-preview{background:#4d9cf0;color:#07101c;border:1px solid #4d9cf0}
+.btn-sweep-preview:hover{background:#6fb0f5}
+.btn-sweep-cons{background:#e8c840;color:#1a1500;border:1px solid #e8c840}
+.btn-sweep-cons:hover{background:#f2d65e}
+.btn-sweep-aggr{background:#f46b6f;color:#1a0002;border:1px solid #f46b6f}
+.btn-sweep-aggr:hover{background:#ff8a8d}
 .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
 .status-active{background:var(--green);box-shadow:0 0 6px rgba(61,214,140,.5)}
 .status-idle{background:var(--dim)}
@@ -287,7 +297,12 @@ tr:last-child td{border-bottom:none}
   <div id="c-phase-done" style="display:none">
     <div class="log" id="c-log"></div>
     <div class="meta"><span id="c-dur"></span><span id="c-time"></span></div>
-    <button class="btn-close" onclick="closeConfirm()" style="margin-top:12px">닫기</button>
+    <!-- 드라이런 결과에서 바로 실행으로 넘어가는 버튼 (미리보기 액션일 때만 노출) -->
+    <div id="c-followup" style="display:none;margin-top:10px;padding:10px 12px;background:rgba(240,146,62,.1);border:1px solid rgba(240,146,62,.3);border-radius:6px;font-size:12px;color:var(--orange)" ></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn-sweep btn-sweep-aggr" id="c-followup-go" style="display:none" onclick="execFollowup()">정리 실행</button>
+      <button class="btn-close" onclick="closeConfirm()">닫기</button>
+    </div>
   </div>
 </div></div>
 
@@ -693,13 +708,32 @@ function getCatLabel(cat){
   const cats = pd.categories || {};
   return cats[cat] ? cats[cat].label : cat;
 }
+// CPU 해악 프로세스 일괄 정리 툴바 — 미리보기로 대상을 먼저 확인한 뒤 실행한다.
+function cpuSweepBar(){
+  // 버튼을 누르면 먼저 드라이런이 돈다 → 대상 목록 팝업 → 하단에서 실행/닫기 선택.
+  // confirmAction 에 confirmMsg 를 주지 않으면 확인 단계를 건너뛰고 바로 실행되므로,
+  // 드라이런 액션에는 메시지를 넘기지 않는다.
+  return `<div class="card" style="margin-bottom:14px">
+    <div style="font-size:14px;font-weight:700">CPU 해악 프로세스 정리</div>
+    <div class="sub" style="margin-top:3px;font-size:12px">누르면 정리 대상을 먼저 보여줍니다 — 확인 후 실행할 수 있습니다</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
+      <button class="btn-sweep btn-sweep-cons" onclick="confirmAction('cpu_sweep_preview_conservative','보수적 정리')">보수적 정리</button>
+      <button class="btn-sweep btn-sweep-aggr" onclick="confirmAction('cpu_sweep_preview_aggressive','적극적 정리')">적극적 정리</button>
+    </div>
+    <div class="sub" style="margin-top:8px;font-size:11px;line-height:1.6">
+      <b>보수적</b> — 고아(부모 없이 CPU 점유) · 격리 앱(AppTranslocation) · 좀비<br>
+      <b>적극적</b> — 위 + CPU 100% 이상 폭주 (빌드 · 인덱싱도 포함될 수 있음)<br>
+      터미널 · IDE · 브라우저 · 메신저 · 보안 프로세스는 항상 제외
+    </div>
+  </div>`;
+}
 function renderPC(){
   if(!D||!D.processes) return;
   const procs=D.processes;
-  let h='';
+  let h=cpuSweepBar();
 
   if(!procs.length){
-    h='<div style="text-align:center;padding:40px;color:var(--dim)">표시할 프로세스가 없습니다.</div>';
+    h+='<div style="text-align:center;padding:40px;color:var(--dim)">표시할 프로세스가 없습니다.</div>';
     document.getElementById('p-pc').innerHTML=h;
     return;
   }
@@ -1481,6 +1515,7 @@ async function manualRefresh(){
 
 // ─── Actions: Confirm → Running → Done (single modal) ───
 let elapsedTimer=null;
+let followupAction=null;  // 드라이런 후속 실행 대상 (closeConfirm 이 선언 전 호출될 수 있어 상단에 둔다)
 function setPhase(phase){
   document.getElementById('c-phase-confirm').style.display=phase==='confirm'?'':'none';
   document.getElementById('c-phase-running').style.display=phase==='running'?'':'none';
@@ -1509,8 +1544,47 @@ function confirmAction(id, label, confirmMsg){
 function closeConfirm(){
   document.getElementById('confirm').classList.remove('show');
   pendingAction=null;
+  // 드라이런 후속 실행 상태를 반드시 비운다 — 남아 있으면 다음 모달에서 엉뚱한 액션이 실행될 수 있다.
+  followupAction=null;
+  document.getElementById('c-followup').style.display='none';
+  document.getElementById('c-followup-go').style.display='none';
   if(elapsedTimer){clearInterval(elapsedTimer);elapsedTimer=null}
 }
+// 미리보기(드라이런) 액션 → 이어서 실행할 액션 매핑.
+// 버튼은 「보수적 정리 / 적극적 정리」 2개뿐이고, 누르면 먼저 드라이런이 돌아
+// 대상 목록을 보여준 뒤 그 팝업 하단에서 실제 실행으로 넘어간다.
+const SWEEP_FOLLOWUP={
+  cpu_sweep_preview_conservative:{next:'cpu_sweep_conservative',label:'보수적 정리 실행',
+    warn:'위 목록을 종료합니다. 고아 · 격리 앱 · 좀비만 대상이며 정상 실행 중인 앱은 포함되지 않습니다.'},
+  cpu_sweep_preview_aggressive:{next:'cpu_sweep_aggressive',label:'적극적 정리 실행',
+    warn:'⚠️ 위 목록을 종료합니다. [runaway] 항목은 빌드 · 코드 인덱싱처럼 정상 작업일 수 있으니 확인하세요.'},
+};
+
+// 드라이런 결과 팝업 하단에 실행 버튼을 붙인다. 대상이 0건이면 붙이지 않는다.
+function applySweepFollowup(id, logs){
+  const box=document.getElementById('c-followup');
+  const btn=document.getElementById('c-followup-go');
+  const cfg=SWEEP_FOLLOWUP[id];
+  const hasTargets=cfg&&!logs.join('\n').includes('정리할 프로세스가 없습니다');
+  if(!hasTargets){
+    followupAction=null; box.style.display='none'; btn.style.display='none';
+    return;
+  }
+  followupAction=cfg.next;
+  box.textContent=cfg.warn; box.style.display='';
+  btn.textContent=cfg.label; btn.style.display='';
+}
+
+// 드라이런 팝업에서 실제 정리로 넘어간다 (같은 모달 안에서 running → done 재진행).
+function execFollowup(){
+  if(!followupAction) return;
+  pendingAction=followupAction;
+  followupAction=null;
+  document.getElementById('c-followup').style.display='none';
+  document.getElementById('c-followup-go').style.display='none';
+  execConfirmed();
+}
+
 async function execConfirmed(){
   const id=pendingAction;
   if(!id) return;
@@ -1533,10 +1607,11 @@ async function execConfirmed(){
     const data=await r.json();
     clearInterval(elapsedTimer);elapsedTimer=null;
     // Transition to done phase
-    document.getElementById('c-title').textContent='실행 완료';
+    document.getElementById('c-title').textContent=SWEEP_FOLLOWUP[id]?'정리 대상 미리보기':'실행 완료';
     document.getElementById('c-log').textContent=data.logs.join('\n');
     document.getElementById('c-dur').textContent=`실행: ${data.duration_ms}ms`;
     document.getElementById('c-time').textContent=data.metrics.timestamp;
+    applySweepFollowup(id, data.logs);
     setPhase('done');
     // Update data + re-render
     D=data.metrics;

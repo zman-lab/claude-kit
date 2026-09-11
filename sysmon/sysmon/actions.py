@@ -17,6 +17,29 @@ _PROTECTED_LAUNCHD_LABELS: frozenset[str] = frozenset({
 
 
 # MCP 이름별 kill 패턴 (pkill -f에 전달)
+# CPU 해악 프로세스 정리 임계값
+# conservative: 고아(PPID=1)·AppTranslocation·좀비만. 정상 부모가 있는 프로세스는 손대지 않는다.
+# aggressive:   위 + 부모가 있어도 CPU 폭주 중인 것까지.
+CPU_SWEEP_ORPHAN_THRESHOLD = 50.0
+CPU_SWEEP_RUNAWAY_THRESHOLD = 100.0
+
+# 폭주해도 죽이면 사용자 작업이 날아가는 것들 (aggressive 에서도 제외)
+# 터미널·IDE·브라우저·에디터는 사용자가 그 안에서 작업 중일 수 있다.
+_SWEEP_NEVER_KILL: tuple[str, ...] = (
+    "/sbin/launchd", "loginwindow", "WindowServer", "kernel_task",
+    "Finder.app", "Dock.app", "SystemUIServer",
+    "iTerm", "Terminal.app", "Warp.app", "cmux",
+    "IntelliJ", "idea", "PyCharm", "DataGrip", "Xcode",
+    "Google Chrome.app", "Safari.app", "Firefox",
+    "KakaoTalk", "Slack.app", "zoom",
+    "ssh-agent", "sshd",
+)
+
+# AppTranslocation = Gatekeeper 격리 앱이 임시 경로에서 도는 상태.
+# 캐시가 매 실행 무효화돼 재인덱싱을 반복하며 CPU 를 태운다 (2026-09-11 VS Code 실측).
+_TRANSLOCATION_MARKER = "/AppTranslocation/"
+
+
 MCP_KILL_PATTERNS: dict[str, list[str]] = {
     "mysql-mcp": ["mysql_mcp_server"],
     "context7": ["context7-mcp", "npm exec.*context7"],
@@ -77,6 +100,14 @@ class ActionRunner:
             self._kill_claude_single(pid, logs)
         elif action_id == "kill_all_zombies":
             self._kill_all_zombies(logs)
+        elif action_id == "cpu_sweep_preview_conservative":
+            self._cpu_sweep(logs, mode="conservative", dry_run=True)
+        elif action_id == "cpu_sweep_preview_aggressive":
+            self._cpu_sweep(logs, mode="aggressive", dry_run=True)
+        elif action_id == "cpu_sweep_conservative":
+            self._cpu_sweep(logs, mode="conservative", dry_run=False)
+        elif action_id == "cpu_sweep_aggressive":
+            self._cpu_sweep(logs, mode="aggressive", dry_run=False)
         elif action_id.startswith("kill_process_"):
             pid = action_id[len("kill_process_"):]
             self._kill_process(pid, logs)
@@ -214,6 +245,147 @@ class ActionRunner:
             logs.append(f"좀비 서브에이전트 {killed}개 종료 완료.")
         else:
             logs.append("종료할 좀비 없음.")
+
+    @classmethod
+    def _sweep_candidates(cls, mode: str) -> list[dict[str, Any]]:
+        """
+        CPU 에 해악을 끼치는 프로세스 후보를 수집한다.
+
+        판정 사유(reason)는 셋 중 하나:
+          - orphan:        PPID=1 인데 CPU 를 태우는 중 (부모가 죽어 정리 신호를 받을 대상이 없다)
+          - translocation: Gatekeeper 격리로 임시 경로에서 도는 앱 (캐시 무효화 → 재인덱싱 반복)
+          - zombie:        Z 상태 (부모가 수거하지 않은 종료 잔재)
+          - runaway:       부모가 있어도 CPU 폭주 (aggressive 전용)
+
+        self/부모/보호대상은 여기서 전부 걸러낸다.
+        """
+        out = _run("ps -Ao pid,ppid,stat,pcpu,rss,command")
+        me, my_parent = os.getpid(), os.getppid()
+        cands: list[dict[str, Any]] = []
+
+        for line in out.split("\n")[1:]:
+            parts = line.strip().split(None, 5)
+            if len(parts) < 6:
+                continue
+            pid_s, ppid_s, stat, cpu_s, rss_s, cmd = parts
+            if not pid_s.isdigit() or not ppid_s.isdigit():
+                continue
+            pid, ppid = int(pid_s), int(ppid_s)
+            try:
+                cpu = float(cpu_s)
+                rss_mb = round(int(rss_s) / 1024)
+            except ValueError:
+                continue
+
+            # 1. 시스템/자기 자신/부모 제외
+            if pid <= 1 or pid in (me, my_parent):
+                continue
+            # 2. 보안 프로세스 제외 (기존 _kill_process 와 동일 기준)
+            low = cmd.lower()
+            if any(p.lower() in low for p in _SECURITY_PATTERNS):
+                continue
+            # 3. sysmon 자신 제외
+            if any(p in low for p in ("sysmon", "uvicorn", "gunicorn")):
+                continue
+            # 4. 죽이면 사용자 작업이 날아가는 것 제외
+            if any(n.lower() in low for n in _SWEEP_NEVER_KILL):
+                continue
+
+            is_zombie = stat.startswith("Z")
+            is_transloc = _TRANSLOCATION_MARKER in cmd
+            is_orphan = ppid == 1
+
+            reason = ""
+            if is_zombie:
+                reason = "zombie"
+            elif is_transloc and cpu >= 1.0:
+                reason = "translocation"
+            elif is_orphan and cpu >= CPU_SWEEP_ORPHAN_THRESHOLD:
+                reason = "orphan"
+            elif mode == "aggressive" and cpu >= CPU_SWEEP_RUNAWAY_THRESHOLD:
+                reason = "runaway"
+
+            if reason:
+                cands.append({
+                    "pid": pid, "cpu": cpu, "rss_mb": rss_mb,
+                    "reason": reason, "cmd": cmd,
+                })
+
+        cands.sort(key=lambda c: c["cpu"], reverse=True)
+        return cands
+
+    @staticmethod
+    def _short_cmd(cmd: str, width: int = 60) -> str:
+        """
+        로그 표시용 이름. `.app` 번들이면 앱 이름을 앞에 붙인다.
+
+        경로에 공백이 있어 split() 으로 실행 파일을 못 끊는 경우가 많다
+        ("Visual Studio Code.app/..." → "Visual"). 그래서 .app 번들명을 따로 집는다.
+        """
+        m = re.search(r"/([^/]+)\.app/", cmd)
+        bundle = m.group(1) if m else ""
+        tail = cmd.rstrip("/").split("/")[-1].split()[0] if cmd.strip() else cmd
+        name = f"{bundle} › {tail}" if bundle and bundle != tail else (bundle or tail)
+        return name[:width]
+
+    @classmethod
+    def _cpu_sweep(cls, logs: list[str], mode: str, dry_run: bool) -> None:
+        """
+        CPU 해악 프로세스 일괄 정리.
+
+        dry_run=True 면 무엇을 죽일지만 보고하고 실제로 죽이지 않는다.
+        UI 는 미리보기 → 확인 → 실행 순으로 호출한다.
+
+        ⚠️ SIGKILL 을 버티는 경우가 실제로 있다 — 커널이 종료 처리 중인 UE(uninterruptible+exiting)
+        상태에서는 시그널이 무시된다(2026-09-11 VS Code 고아 프로세스 실측). 그래서 3라운드 반복한다.
+        """
+        label = "보수적" if mode == "conservative" else "적극적"
+        cands = cls._sweep_candidates(mode)
+
+        if not cands:
+            logs.append(f"[{label}] 정리할 프로세스가 없습니다.")
+            return
+
+        total_cpu = sum(c["cpu"] for c in cands)
+        total_mem = sum(c["rss_mb"] for c in cands)
+
+        if dry_run:
+            logs.append(f"[{label} 미리보기] 대상 {len(cands)}개 · CPU 합계 {total_cpu:.0f}% · 메모리 {total_mem}MB")
+            for c in cands:
+                logs.append(
+                    f"  PID {c['pid']:>6} · CPU {c['cpu']:>6.1f}% · "
+                    f"{c['rss_mb']:>5}MB · [{c['reason']}] {cls._short_cmd(c['cmd'])}"
+                )
+            logs.append("\n※ 미리보기입니다. 실제로 종료하지 않았습니다.")
+            return
+
+        pids = [str(c["pid"]) for c in cands]
+        logs.append(f"[{label}] 대상 {len(cands)}개 종료 시작 (CPU 합계 {total_cpu:.0f}%)")
+
+        # SIGTERM → SIGKILL, 최대 3라운드 (UE 상태 대응)
+        for pid in pids:
+            _run(f"kill -TERM {pid} 2>/dev/null")
+        time.sleep(1)
+
+        remaining = pids
+        for rnd in range(1, 4):
+            remaining = [p for p in remaining if _run(f"ps -p {p} -o pid= 2>/dev/null").strip()]
+            if not remaining:
+                break
+            for pid in remaining:
+                _run(f"kill -KILL {pid} 2>/dev/null")
+            time.sleep(1.5)
+            logs.append(f"  round {rnd}: SIGKILL 후 잔존 {len(remaining)}개")
+
+        alive = [p for p in pids if _run(f"ps -p {p} -o pid= 2>/dev/null").strip()]
+        killed = len(pids) - len(alive)
+        logs.append(f"\n{killed}/{len(pids)}개 종료 완료 · CPU {total_cpu:.0f}% · 메모리 {total_mem}MB 회수 예상")
+
+        if alive:
+            logs.append(
+                f"⚠️ {len(alive)}개가 종료되지 않았습니다 (PID {', '.join(alive)}).\n"
+                "커널 종료 처리 중(UE)일 수 있습니다 — 잠시 후 다시 실행해 보세요."
+            )
 
     @staticmethod
     def _kill_process(pid: str, logs: list[str]) -> None:
