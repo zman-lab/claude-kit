@@ -216,7 +216,7 @@ wheels = [
 ]
 
 [[package]]
-name = "elkhound-qa-mcp"
+name = "eh-qa-mcp"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
