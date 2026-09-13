@@ -7,7 +7,7 @@ import os
 import httpx
 from mcp.server.fastmcp import FastMCP
 
-BASE_URL = os.getenv("BOARD_URL", "http://127.0.0.1:8585")
+BASE_URL = os.getenv("BOARD_URL", "http://10.77.11.110:8585")
 
 
 def _build_instructions() -> str:
