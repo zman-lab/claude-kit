@@ -5,6 +5,7 @@ import subprocess
 import time
 from typing import Any
 
+from . import respawn
 from .collectors.base import _SECURITY_PATTERNS
 
 # launchd 레이블 허용 패턴: 영문자, 숫자, 점, 밑줄, 하이픈만 허용
@@ -108,6 +109,11 @@ class ActionRunner:
             self._cpu_sweep(logs, mode="conservative", dry_run=False)
         elif action_id == "cpu_sweep_aggressive":
             self._cpu_sweep(logs, mode="aggressive", dry_run=False)
+        elif action_id == "respawn_scan":
+            self._respawn_scan(logs)
+        elif action_id.startswith("pidfile_repair_"):
+            guard_id = action_id[len("pidfile_repair_"):]
+            self._pidfile_repair(guard_id, logs, password=kwargs.get("password", ""))
         elif action_id.startswith("kill_process_"):
             pid = action_id[len("kill_process_"):]
             self._kill_process(pid, logs)
@@ -528,3 +534,88 @@ class ActionRunner:
                     logs.append(f"실행 실패: {err}")
         except subprocess.TimeoutExpired:
             logs.append("시간 초과 (30초)")
+
+    @staticmethod
+    def _respawn_scan(logs: list[str]) -> None:
+        """
+        재시작 루프 탐지 + stale pidfile 점검.
+
+        sweep 과 달리 **아무것도 종료하지 않는다.** CPU sweep 이 구조적으로 못 보는
+        축(죽었다 살아나기를 반복하는 프로세스)을 채우는 진단 전용 액션이다.
+        """
+        window = respawn.RESPAWN_SCAN_WINDOW_SEC
+        logs.append(f"[재시작 루프 검사] {window}초간 프로세스를 관찰합니다…")
+
+        result = respawn.scan_respawn(window_sec=window)
+        loops = result["loops"]
+
+        if loops:
+            logs.append(f"\n■ 재시작 루프 {len(loops)}건 발견 (관찰 {result['samples']}회)")
+            for lp in loops:
+                tag = " [보안SW]" if lp["security"] else ""
+                logs.append(
+                    f"  {lp['name']}{tag}\n"
+                    f"      서로 다른 PID {lp['distinct_pids']}개 교대 "
+                    f"(~{lp['spawns_per_min']}회/분) · CPU 최고 {lp['cpu_peak']}%\n"
+                    f"      관측 PID: {', '.join(str(p) for p in lp['pids'])}"
+                )
+            logs.append(
+                "\n※ 재시작 루프는 종료해도 소용이 없습니다 — 감시자가 즉시 되살립니다.\n"
+                "   원인(대개 stale pidfile 이나 기동 실패)을 고쳐야 멎습니다."
+            )
+        else:
+            logs.append(f"\n■ 재시작 루프 없음 (관찰 {result['samples']}회)")
+
+        # ── stale pidfile ──
+        rows = respawn.check_pidfile_guards()
+        stale = [r for r in rows if r["status"] == "stale"]
+        if not rows:
+            return
+
+        logs.append(f"\n■ pidfile 점검 {len(rows)}건")
+        for r in rows:
+            mark = {"ok": "정상", "stale": "⚠️ 유령", "dead": "빈 PID", "missing": "파일 없음"}
+            logs.append(f"  [{mark.get(r['status'], r['status'])}] {r['name']} — {r['detail']}")
+
+        for r in stale:
+            logs.append(
+                f"\n⚠️ {r['name']} 의 pidfile 이 엉뚱한 프로세스를 가리킵니다.\n"
+                f"   {r['pidfile']}\n"
+                f"   데몬이 '이미 실행 중'으로 오판해 무한 재시작을 돌게 됩니다.\n"
+                f"   {r['hint']}"
+            )
+            # UI 가 후속 수리 버튼을 붙일 때 쓰는 마커.
+            logs.append(f"[REPAIR:{r['id']}] {r['name']} pidfile 수리 가능")
+
+    @staticmethod
+    def _pidfile_repair(guard_id: str, logs: list[str], password: str) -> None:
+        """stale pidfile 을 백업 경로로 옮겨 재시작 루프를 끊는다."""
+        logs.append(f"[pidfile_repair] id={guard_id!r} 진입.")
+
+        if not _LABEL_PATTERN.match(guard_id or ""):
+            logs.append(f"유효하지 않은 id 형식: {guard_id!r}")
+            return
+
+        guards = {g.get("id"): g for g in respawn.load_guards()}
+        guard = guards.get(guard_id)
+        if not guard:
+            logs.append(f"등록되지 않은 pidfile 대상: {guard_id!r}")
+            return
+
+        # 수리 직전 재확인 — 그 사이 데몬이 정상화됐을 수 있다.
+        rows = {r["id"]: r for r in respawn.check_pidfile_guards([guard])}
+        row = rows.get(guard_id, {})
+        if row.get("status") != "stale":
+            logs.append(
+                f"{guard.get('name')} 의 pidfile 은 지금 '{row.get('status')}' 상태입니다 "
+                f"({row.get('detail')}). 수리할 것이 없어 중단합니다."
+            )
+            return
+
+        ok, msg = respawn.repair_pidfile(guard, password=password)
+        logs.append(msg)
+        if ok:
+            logs.append(
+                "다음 기동 때 데몬이 자기 PID 를 새로 기록합니다.\n"
+                "잠시 뒤 「재시작 루프 검사」를 다시 눌러 루프가 멎었는지 확인하세요."
+            )

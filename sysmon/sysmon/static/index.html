@@ -150,6 +150,9 @@ tr:last-child td{border-bottom:none}
 .btn-sweep-cons:hover{background:#f2d65e}
 .btn-sweep-aggr{background:#f46b6f;color:#1a0002;border:1px solid #f46b6f}
 .btn-sweep-aggr:hover{background:#ff8a8d}
+/* 진단 전용 — 아무것도 종료하지 않으므로 kill 계열(노랑·빨강)과 색을 가른다. */
+.btn-sweep-scan{background:#3dd68c;color:#00190e;border:1px solid #3dd68c}
+.btn-sweep-scan:hover{background:#5ee5a5}
 .status-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px}
 .status-active{background:var(--green);box-shadow:0 0 6px rgba(61,214,140,.5)}
 .status-idle{background:var(--dim)}
@@ -299,6 +302,11 @@ tr:last-child td{border-bottom:none}
     <div class="meta"><span id="c-dur"></span><span id="c-time"></span></div>
     <!-- 드라이런 결과에서 바로 실행으로 넘어가는 버튼 (미리보기 액션일 때만 노출) -->
     <div id="c-followup" style="display:none;margin-top:10px;padding:10px 12px;background:rgba(240,146,62,.1);border:1px solid rgba(240,146,62,.3);border-radius:6px;font-size:12px;color:var(--orange)" ></div>
+    <!-- 후속 액션이 sudo 를 요구할 때만 노출. confirm 단계의 입력란은 이 화면에서 보이지 않으므로 따로 둔다. -->
+    <div id="c-followup-sudo-wrap" style="display:none;margin-top:10px">
+      <label style="font-size:11px;color:var(--dim)">macOS 비밀번호 (sudo)</label>
+      <input type="password" id="c-followup-sudo-pw" placeholder="비밀번호 입력" style="width:100%;margin-top:4px;padding:8px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;outline:none" autocomplete="off"/>
+    </div>
     <div style="display:flex;gap:8px;margin-top:12px">
       <button class="btn-sweep btn-sweep-aggr" id="c-followup-go" style="display:none" onclick="execFollowup()">정리 실행</button>
       <button class="btn-close" onclick="closeConfirm()">닫기</button>
@@ -719,11 +727,14 @@ function cpuSweepBar(){
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:12px">
       <button class="btn-sweep btn-sweep-cons" onclick="confirmAction('cpu_sweep_preview_conservative','보수적 정리')">보수적 정리</button>
       <button class="btn-sweep btn-sweep-aggr" onclick="confirmAction('cpu_sweep_preview_aggressive','적극적 정리')">적극적 정리</button>
+      <button class="btn-sweep btn-sweep-scan" onclick="confirmAction('respawn_scan','재시작 루프 검사')">재시작 루프 검사</button>
     </div>
     <div class="sub" style="margin-top:8px;font-size:11px;line-height:1.6">
       <b>보수적</b> — 고아(부모 없이 CPU 점유) · 격리 앱(AppTranslocation) · 좀비<br>
       <b>적극적</b> — 위 + CPU 100% 이상 폭주 (빌드 · 인덱싱도 포함될 수 있음)<br>
-      터미널 · IDE · 브라우저 · 메신저 · 보안 프로세스는 항상 제외
+      터미널 · IDE · 브라우저 · 메신저 · 보안 프로세스는 항상 제외<br>
+      <b>재시작 루프 검사</b> — 죽었다 살아나기를 반복하는 프로세스를 찾는다(20초 관찰).
+      위 두 정리가 구조적으로 못 보는 축이라 따로 둔다. <b>아무것도 종료하지 않는다.</b>
     </div>
   </div>`;
 }
@@ -1521,13 +1532,17 @@ function setPhase(phase){
   document.getElementById('c-phase-running').style.display=phase==='running'?'':'none';
   document.getElementById('c-phase-done').style.display=phase==='done'?'':'none';
 }
+// sudo 비밀번호가 필요한 액션.
+function needsSudo(id){
+  return id==='purge_cache'||String(id).indexOf('pidfile_repair_')===0;
+}
 function confirmAction(id, label, confirmMsg){
   pendingAction=id;
   document.getElementById('c-title').textContent=label;
   // Show/hide sudo password field
   const sudoWrap=document.getElementById('c-sudo-wrap');
   const sudoPw=document.getElementById('c-sudo-pw');
-  sudoWrap.style.display=(id==='purge_cache')?'':'none';
+  sudoWrap.style.display=needsSudo(id)?'':'none';
   sudoPw.value='';
   if(!confirmMsg){
     document.getElementById('confirm').classList.add('show');
@@ -1548,6 +1563,11 @@ function closeConfirm(){
   followupAction=null;
   document.getElementById('c-followup').style.display='none';
   document.getElementById('c-followup-go').style.display='none';
+  // 후속 sudo 입력란도 반드시 비운다 — 비밀번호가 모달에 남아 있지 않게.
+  const fw=document.getElementById('c-followup-sudo-wrap');
+  const fp=document.getElementById('c-followup-sudo-pw');
+  if(fw) fw.style.display='none';
+  if(fp) fp.value='';
   if(elapsedTimer){clearInterval(elapsedTimer);elapsedTimer=null}
 }
 // 미리보기(드라이런) 액션 → 이어서 실행할 액션 매핑.
@@ -1564,6 +1584,29 @@ const SWEEP_FOLLOWUP={
 function applySweepFollowup(id, logs){
   const box=document.getElementById('c-followup');
   const btn=document.getElementById('c-followup-go');
+  const sudoWrap=document.getElementById('c-followup-sudo-wrap');
+
+  // 재시작 루프 검사는 드라이런이 아니라 진단이라 후속 대상이 고정돼 있지 않다.
+  // 서버가 로그에 심은 [REPAIR:{id}] 마커를 보고 수리 버튼을 동적으로 붙인다.
+  if(id==='respawn_scan'){
+    const m=logs.join('\n').match(/\[REPAIR:([a-zA-Z0-9._-]+)\]\s*(.*)/);
+    if(!m){
+      followupAction=null; box.style.display='none'; btn.style.display='none';
+      sudoWrap.style.display='none';
+      return;
+    }
+    followupAction='pidfile_repair_'+m[1];
+    box.textContent='이 pidfile 을 /tmp 로 옮깁니다 — 삭제가 아니라 이동이라 롤백할 수 있습니다. '
+      +'프로세스는 하나도 종료하지 않습니다. root 소유 파일이면 sudo 비밀번호가 필요합니다.';
+    box.style.display='';
+    btn.textContent=(m[2]||'pidfile 수리').trim();
+    btn.style.display='';
+    sudoWrap.style.display='';
+    setTimeout(()=>document.getElementById('c-followup-sudo-pw').focus(),100);
+    return;
+  }
+  sudoWrap.style.display='none';
+
   const cfg=SWEEP_FOLLOWUP[id];
   const hasTargets=cfg&&!logs.join('\n').includes('정리할 프로세스가 없습니다');
   if(!hasTargets){
@@ -1601,13 +1644,16 @@ async function execConfirmed(){
   },500);
   try{
     const body={};
-    const sudoPw=document.getElementById('c-sudo-pw').value;
+    // 확인 단계의 입력란과, 진단 결과 화면의 후속 입력란 중 값이 있는 쪽을 쓴다.
+    const sudoPw=document.getElementById('c-sudo-pw').value
+      ||document.getElementById('c-followup-sudo-pw').value;
     if(sudoPw) body.password=sudoPw;
     const r=await fetch('/api/action/'+id,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     const data=await r.json();
     clearInterval(elapsedTimer);elapsedTimer=null;
     // Transition to done phase
-    document.getElementById('c-title').textContent=SWEEP_FOLLOWUP[id]?'정리 대상 미리보기':'실행 완료';
+    document.getElementById('c-title').textContent=
+      SWEEP_FOLLOWUP[id]?'정리 대상 미리보기':(id==='respawn_scan'?'재시작 루프 검사 결과':'실행 완료');
     document.getElementById('c-log').textContent=data.logs.join('\n');
     document.getElementById('c-dur').textContent=`실행: ${data.duration_ms}ms`;
     document.getElementById('c-time').textContent=data.metrics.timestamp;
